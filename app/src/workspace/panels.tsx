@@ -517,7 +517,7 @@ function GraphDocument({ behaviorId, api }: { behaviorId: string; api: IDockview
               ["copy", "Copy", <Copy size={13} />],
               ["paste", "Paste", <ClipboardPaste size={13} />],
               ["delete", "Delete", <Trash2 size={13} />],
-              ["convert-to-box", "Group into box", <Workflow size={13} />],
+              ["convert-to-box", "Group into box…", <Workflow size={13} />],
             ] as const
           ).map(([id, title, icon]) => {
             const command = ws.commands.find((c) => c.id === id);
@@ -575,6 +575,7 @@ function GraphDocument({ behaviorId, api }: { behaviorId: string; api: IDockview
               : undefined
           }
           onCommand={ws.execute}
+          commands={ws.commands}
           glowing={glowing}
         />
       ) : (

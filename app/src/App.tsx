@@ -1121,7 +1121,7 @@ export default function App() {
     },
     {
       id: "convert-to-box",
-      title: "Convert to box…",
+      title: "Group into box…",
       group: "Edit",
       enabled:
         isEditable &&
@@ -1948,7 +1948,7 @@ export default function App() {
           </Modal>
         )}
         {modal === "convert" && (
-          <Modal title="Convert to box" onClose={() => setModal(undefined)}>
+          <Modal title="Group into box…" onClose={() => setModal(undefined)}>
             <form
               className="settings-content"
               onSubmit={(e) => {
@@ -1974,7 +1974,7 @@ export default function App() {
                   required
                 />
               </label>
-              <button type="submit">Convert</button>
+              <button type="submit">Group</button>
             </form>
           </Modal>
         )}

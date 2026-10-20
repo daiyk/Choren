@@ -174,6 +174,8 @@ async function backend(page: Page, format: "pml" | "crg" = "pml", timelineRoot =
             if (command.startsWith("plugin:") || command === "authorize_project_root") return;
             if (command === "project_open") return { session: 7, ...doc() };
             if (command === "project_edit") {
+              if ((window as any).holdMenuEdit)
+                await new Promise<void>(resolve => { (window as any).releaseMenuEdit = resolve; });
               for (const c of args.commands) if (c.type === "setAttributes" && c.values.value !== undefined) paramValues[c.node] = c.values.value;
               return changed(args.label);
             }
@@ -294,9 +296,9 @@ test("convert to box wraps the selected boxes", async ({ page }) => {
   await backend(page);
   await page.locator(".react-flow__node-box", { hasText: "Greeter" }).click();
   await page.locator(".react-flow__node-box", { hasText: "Waver" }).click({ modifiers: ["Shift"] });
-  await palette(page, "Convert to box");
+  await palette(page, "Group into box");
   await page.getByRole("textbox", { name: "Name of the new box" }).fill("Greeting");
-  await page.getByRole("button", { name: "Convert", exact: true }).click();
+  await page.getByRole("button", { name: "Group", exact: true }).click();
   await expect.poll(() => lastEdit(page)).toMatchObject({
     label: "Convert selection to box",
     commands: [{ type: "convertToBox", diagram: 10, name: "Greeting" }],
@@ -801,6 +803,150 @@ test("diagram context menu supports Cut, zoom presets and dialog-box creation", 
   await dialog.getByRole("button", {name: "Create", exact: true}).click();
   await expect.poll(() => lastEdit(page)).toMatchObject({commands: [{type: "newBox", kind: "Dialog", dialogFile: "../greet/greet.dlg"}]});
 });
+
+for (const style of ["choren", "classic"] as const) {
+  const setupMenus = async (page: Page) => {
+    await page.addInitScript(style => localStorage.setItem("choren.graph-style", JSON.stringify(style)), style);
+    await backend(page);
+  };
+  const box = (page: Page, id: number) => page.locator(`.react-flow__node-box[data-id="${id}"]`);
+  const wirePoint = (page: Page) => page.locator(".react-flow__edge-path").first().evaluate((path: SVGPathElement) => {
+    const point = path.getPointAtLength(path.getTotalLength() / 2).matrixTransform(path.getScreenCTM()!);
+    return { x: point.x, y: point.y };
+  });
+  test(`context menus target connections and keep box groups (${style})`, async ({ page }) => {
+    await setupMenus(page);
+    const menu = page.getByRole("menu", { name: "Diagram actions" });
+    await box(page, 1).click();
+    await box(page, 2).click({ modifiers: ["Shift"] });
+    await box(page, 1).click({ button: "right" });
+    await expect(menu.getByText("2 boxes selected")).toBeVisible();
+    await expect(menu.getByRole("menuitem")).toHaveText(["Group into box…", "Cut", "Copy", "Delete selection (2 boxes)", "Fit selection"]);
+    await menu.getByRole("menuitem", { name: "Group into box…" }).click();
+    await page.getByRole("textbox", { name: "Name of the new box" }).fill("Pair");
+    await page.getByRole("button", { name: "Group", exact: true }).click();
+    await expect.poll(() => lastEdit(page)).toMatchObject({
+      commands: [{ type: "convertToBox", boxes: [20, 30], name: "Pair" }],
+    });
+
+    // A different box replaces the prior group.
+    await box(page, 1).click();
+    await box(page, 2).click({ modifiers: ["Shift"] });
+    await box(page, 3).click({ button: "right" });
+    await expect(menu.getByRole("menuitem", { name: "Delete box", exact: true })).toBeVisible();
+    await menu.getByRole("menuitem", { name: "Copy", exact: true }).click();
+    await expect.poll(() => calls(page, "project_copy")).toMatchObject([{ boxes: [40] }]);
+
+    // Right-clicking the wire must never delete the selected boxes.
+    await box(page, 1).click();
+    await box(page, 2).click({ modifiers: ["Shift"] });
+    const point = await wirePoint(page);
+    await page.mouse.click(point.x, point.y, { button: "right" });
+    await expect(menu.getByRole("menuitem")).toHaveText(["Delete connection"]);
+    await expect(page.locator(".react-flow__node-box.selected")).toHaveCount(0);
+    await menu.getByRole("menuitem", { name: "Delete connection" }).click();
+    await expect.poll(() => lastEdit(page)).toMatchObject({ commands: [{ type: "remove", nodes: [11] }] });
+    await expect(menu).toHaveCount(0);
+  });
+
+  test(`context menus isolate canvas actions, clamp size and dismiss (${style})`, async ({ page }, info) => {
+    await setupMenus(page);
+    await box(page, 1).click();
+    const menu = page.getByRole("menu", { name: "Diagram actions" });
+    await page.evaluate(() => document.documentElement.style.setProperty("--text-scale", "1.5"));
+    const bounds = (await page.getByTestId("graph").boundingBox())!;
+    await page.mouse.click(bounds.x + bounds.width - 65, bounds.y + bounds.height - 65, { button: "right" });
+    await expect(menu.getByRole("menuitem")).toHaveText(["Create a new box…", "Paste", "Fit graph"]);
+    await expect(menu.getByRole("menuitem", { name: "Paste", exact: true })).toBeDisabled();
+    await expect(menu.getByRole("menuitem", { name: "Paste", exact: true })).toHaveAttribute("title", "Copy boxes first.");
+    await expect(page.locator(".react-flow__node-box.selected")).toHaveCount(1);
+    const rect = (await menu.boundingBox())!;
+    expect(rect.x).toBeGreaterThanOrEqual(bounds.x);
+    expect(rect.y).toBeGreaterThanOrEqual(bounds.y);
+    expect(rect.x + rect.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+    expect(rect.y + rect.height).toBeLessThanOrEqual(bounds.y + bounds.height);
+    await page.screenshot({ path: info.outputPath(`context-menu-${style}.png`) });
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+
+    await box(page, 1).click({ button: "right" });
+    await menu.getByRole("menuitem", { name: "Copy", exact: true }).click();
+    await expect.poll(() => calls(page, "project_copy")).toHaveLength(1);
+    await page.mouse.click(bounds.x + bounds.width - 65, bounds.y + bounds.height - 65, { button: "right" });
+    await expect(menu.getByRole("menuitem", { name: "Paste", exact: true })).toBeEnabled();
+    await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+    await expect(menu).toHaveCount(0);
+    await box(page, 1).click({ button: "right" });
+    await box(page, 3).click();
+    await expect(menu).toHaveCount(0);
+  });
+
+  test(`context menus support keyboard targets and mixed deletion (${style})`, async ({ page }) => {
+    await setupMenus(page);
+    const menu = page.getByRole("menu", { name: "Diagram actions" });
+    await box(page, 1).focus();
+    await page.keyboard.press("Shift+F10");
+    await expect(menu.getByRole("menuitem", { name: "Open Greeter" })).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(menu.getByRole("menuitem", { name: "Properties", exact: true })).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(menu.getByRole("menuitem", { name: "Delete box", exact: true })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(box(page, 1)).toBeFocused();
+    const edge = page.locator(".react-flow__edge").first();
+    await edge.focus();
+    await page.keyboard.press("Shift+F10");
+    await expect(menu.getByRole("menuitem", { name: "Delete connection" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(edge).toBeFocused();
+
+    await box(page, 1).click();
+    const point = await wirePoint(page);
+    await page.keyboard.down("Shift");
+    await page.mouse.click(point.x, point.y);
+    await page.keyboard.up("Shift");
+    await box(page, 1).click({ button: "right" });
+    await expect(menu.getByText("1 box, 1 connection selected")).toBeVisible();
+    await menu.getByRole("menuitem", { name: /Delete selection/ }).click();
+    await expect.poll(() => lastEdit(page)).toMatchObject({ commands: [{ type: "remove", nodes: [11, 20] }] });
+  });
+
+  test(`context menus support selection outlines and close on document changes (${style})`, async ({ page }) => {
+    await setupMenus(page);
+    const first = (await box(page, 1).boundingBox())!;
+    const second = (await box(page, 2).boundingBox())!;
+    // Marquee selection creates React Flow's separate selection surface.
+    await page.mouse.move(first.x - 8, first.y - 8);
+    await page.mouse.down();
+    await page.mouse.move(second.x + second.width + 8, second.y + second.height + 8, { steps: 8 });
+    await page.mouse.up();
+    const outline = page.locator(".react-flow__nodesselection-rect");
+    await expect(outline).toBeVisible();
+    await outline.focus();
+    await page.keyboard.press("Shift+F10");
+    const menu = page.getByRole("menu", { name: "Diagram actions" });
+    await expect(menu.getByRole("menuitem", { name: "Group into box…" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(outline).toBeFocused();
+    await outline.click({ button: "right", position: { x: 5, y: 5 } });
+    await expect(menu.getByText(/2 boxes/).first()).toBeVisible();
+    await menu.getByRole("menuitem", { name: "Copy", exact: true }).click();
+    await expect.poll(() => calls(page, "project_copy")).toMatchObject([{ boxes: [20, 30] }]);
+
+    // A pending edit can finish while another menu is open: discard its stale target.
+    await page.evaluate(() => { (window as any).holdMenuEdit = true; });
+    await page.keyboard.press("Escape");
+    const graph = (await page.getByTestId("graph").boundingBox())!;
+    await page.mouse.click(graph.x + graph.width - 65, graph.y + graph.height - 65);
+    await box(page, 1).click({ button: "right" });
+    await menu.getByRole("menuitem", { name: "Cut", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => typeof (window as any).releaseMenuEdit)).toBe("function");
+    await box(page, 3).click({ button: "right" });
+    await expect(menu).toBeVisible();
+    await page.evaluate(() => (window as any).releaseMenuEdit());
+    await expect(menu).toHaveCount(0);
+  });
+}
 
 test("timeline range, acquisition and layer mute emit undoable edits", async ({page}) => {
   await backend(page, "pml", true);

@@ -220,6 +220,25 @@ async function graphUI(page: Page, value: "choren" | "classic") {
   await expect(page.getByTestId("graph")).toHaveAttribute("data-graph-style", value);
 }
 
+test("connection context deletion is undoable without removing its box", async ({ page }) => {
+  await backend(page);
+  await page.getByRole("button", { name: "Open project", exact: true }).first().click();
+  const box = page.locator(".react-flow__node-box");
+  await expect(box).toHaveCount(1);
+  await box.click();
+  const edge = page.locator(".react-flow__edge").first();
+  await edge.focus();
+  await page.keyboard.press("Shift+F10");
+  await page.getByRole("menuitem", { name: "Delete connection" }).click();
+  await expect(page.locator(".react-flow__edge")).toHaveCount(0);
+  await expect(box).toHaveCount(1);
+  await page.getByRole("button", { name: /Search commands/ }).click();
+  await page.getByRole("textbox", { name: "Search commands" }).fill("Undo");
+  await page.getByRole("button", { name: /Undo Delete selection in diagram/ }).click();
+  await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+  await expect(box).toHaveCount(1);
+});
+
 test("Graph UI switches preserve selection, positions and wires and persist after reload", async ({ page }, testInfo) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));

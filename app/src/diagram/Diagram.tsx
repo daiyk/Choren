@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
   MiniMap,
@@ -35,6 +35,11 @@ import { LIBRARY_BOX_MIME } from "../platform";
 import type { EditCommand } from "../workspace/authoring";
 import { Modal } from "../workspace/Modal";
 import { Inspector } from "../Inspector";
+import type { Command } from "../workspace/registry";
+import { ContextMenu } from "./ContextMenu";
+
+type MenuTarget = { kind: "canvas" } | { kind: "box"; box: Box } |
+  { kind: "selection" } | { kind: "connection"; id: string };
 
 const LEFT = "rail-left",
   RIGHT = "rail-right";
@@ -173,6 +178,7 @@ interface Props {
   onEdit?: (label: string, commands: EditCommand[]) => Promise<unknown>;
   /** Runs a workspace command such as "delete", "copy" or "paste". */
   onCommand?: (id: string) => void;
+  commands?: Pick<Command, "id" | "enabled" | "reason">[];
   /** Box ids the running behavior just stimulated. */
   glowing?: Set<string>;
 }
@@ -191,15 +197,32 @@ function Graph({
   onControls,
   onEdit,
   onCommand,
+  commands = [],
   glowing,
 }: Props) {
   const editable = !!onEdit && diagram.node !== undefined;
-  const [contextMenu, setContextMenu] = useState<{x: number; y: number; box?: Box}>();
+  const [contextMenu, setContextMenu] = useState<{x: number; y: number; target: MenuTarget}>();
   const [portMenu, setPortMenu] = useState<{x: number; y: number; box: Box; port: Port; source: boolean; ownerId: number}>();
   const [parameterLink, setParameterLink] = useState<{box: Box; outOwner: number; outPort: number}>();
   const [editingPorts, setEditingPorts] = useState<number>();
   const portBox = editingPorts === 0 ? owner : diagram.boxes.find(b => b.id === editingPorts);
   const root = useRef<HTMLDivElement>(null);
+  const menuTrigger = useRef<Element | null>(null);
+  const closeMenus = useCallback((restoreFocus = false) => {
+    setContextMenu(undefined);
+    setPortMenu(undefined);
+    if (restoreFocus) {
+      const trigger = menuTrigger.current?.isConnected ? menuTrigger.current : root.current;
+      (trigger as HTMLElement | SVGElement | null)?.focus({ preventScroll: true });
+    }
+  }, []);
+  const menuPosition = (event: { clientX: number; clientY: number; target: EventTarget | null }) => {
+    menuTrigger.current = (event.target as Element).closest(
+      ".react-flow__handle,.react-flow__node-box,.react-flow__edge,.react-flow__nodesselection-rect",
+    ) ?? root.current;
+    const rect = root.current!.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  };
   const [size, setSize] = useState({ width: 800, height: 600 });
   const [minimap, setMinimap] = useState(false);
   const viewport = useViewport();
@@ -208,7 +231,8 @@ function Graph({
   const cancelClickConnection = () => store.setState({ connectionClickStartHandle: null });
   useEffect(() => {
     store.setState({ connectionClickStartHandle: null });
-  }, [graphStyle, store]);
+    closeMenus();
+  }, [graphStyle, diagram, store, closeMenus]);
   const fitted = useRef(false);
   // React Flow can emit node and edge changes in one event before React renders.
   const selectionRef = useRef(selection);
@@ -216,6 +240,13 @@ function Graph({
   const select = (next: Selection) => {
     selectionRef.current = next;
     onSelect(next);
+  };
+  const openMenu = (event: { preventDefault: () => void; stopPropagation: () => void; clientX: number; clientY: number; target: EventTarget | null }, target: MenuTarget) => {
+    event.preventDefault();
+    event.stopPropagation();
+    cancelClickConnection();
+    setPortMenu(undefined);
+    setContextMenu({ ...menuPosition(event), target });
   };
   const built = useMemo(
     () => buildGraph(diagram, owner, editable, graphStyle),
@@ -341,10 +372,17 @@ function Graph({
     ...e,
     selected: selection.edges.includes(e.id),
   }));
+  const target = contextMenu?.target;
+  const selectionCount = `${selection.nodes.length} ${selection.nodes.length === 1 ? "box" : "boxes"}${selection.edges.length ? `, ${selection.edges.length} ${selection.edges.length === 1 ? "connection" : "connections"}` : ""}`;
+  const menuCommands = target?.kind === "canvas" ? [["insert", "Create a new box…"], ["paste", "Paste"]]
+    : target?.kind === "connection" ? [["delete", "Delete connection"]]
+    : target?.kind === "selection" ? [["convert-to-box", "Group into box…"], ["cut", "Cut"], ["copy", "Copy"], ["delete", `Delete selection (${selectionCount})`]]
+    : [["cut", "Cut"], ["copy", "Copy"], ["convert-to-box", "Group into box…"], ["delete", "Delete box"]];
   return (
     <div
       className={editable ? "graph editable" : "graph"}
       ref={root}
+      tabIndex={-1}
       data-testid="graph"
       data-graph-style={graphStyle}
       onContextMenuCapture={e => {
@@ -360,8 +398,7 @@ function Graph({
         const port = (rail ? source ? box.inputs : box.outputs : source ? box.outputs : [...box.inputs, ...box.params.map(paramPort)]).find(p => p.id === id);
         if (!port) return;
         select({nodes: rail ? [] : [String(box.id)], edges: []});
-        const rect = root.current!.getBoundingClientRect();
-        setPortMenu({x: Math.max(0, Math.min(e.clientX - rect.left, rect.width - 200)), y: Math.max(0, Math.min(e.clientY - rect.top, rect.height - 180)), box, port, source, ownerId: rail ? 0 : box.id});
+        setPortMenu({...menuPosition(e), box, port, source, ownerId: rail ? 0 : box.id});
       }}
       onDragOver={(event) => {
         if (diagram.node === undefined || !onInsertLibrary || !event.dataTransfer.types.includes(LIBRARY_BOX_MIME)) return;
@@ -382,9 +419,9 @@ function Graph({
           )
         )
           return;
-        if (e.key === "Escape") { cancelClickConnection(); setContextMenu(undefined); setPortMenu(undefined); }
+        if (e.key === "Escape") { cancelClickConnection(); closeMenus(!!contextMenu || !!portMenu); }
         if ((e.key === "F10" && e.shiftKey) || e.key === "ContextMenu") {
-          const target = (e.target as Element).closest<HTMLElement>(".react-flow__handle");
+          const target = (e.target as Element).closest<HTMLElement>(".react-flow__handle,.react-flow__node-box,.react-flow__edge,.react-flow__nodesselection-rect");
           if (target) {e.preventDefault(); const rect = target.getBoundingClientRect(); target.dispatchEvent(new MouseEvent("contextmenu", {bubbles: true, clientX: rect.left, clientY: rect.bottom}));}
         }
         if (e.defaultPrevented || (e.target as Element).closest('[role="menu"]')) return;
@@ -486,6 +523,7 @@ function Graph({
         maxZoom={4}
         defaultViewport={savedViewport ?? { x: 0, y: 0, zoom: 1 }}
         onlyRenderVisibleElements
+        onMoveStart={() => closeMenus()}
         onMoveEnd={(_, v) => onViewport(v)}
         onNodesChange={(changes) => {
           const selected = new Set(selectionRef.current.nodes);
@@ -508,17 +546,21 @@ function Graph({
             select({ ...selectionRef.current, edges: [...selected] });
         }}
         onPaneContextMenu={e => {
-          setPortMenu(undefined);
-          e.preventDefault(); const rect = root.current!.getBoundingClientRect();
-          setContextMenu({x: Math.max(0, Math.min(e.clientX - rect.left, rect.width - 190)), y: Math.max(0, Math.min(e.clientY - rect.top, rect.height - 250))});
+          // Right-button panning also reports mouse-up on non-draggable boxes as a pane event.
+          if ((e.target as Element).closest(".react-flow__node,.react-flow__edge,.react-flow__nodesselection")) return;
+          openMenu(e, {kind: "canvas"});
         }}
         onNodeContextMenu={(e, n) => {
-          setPortMenu(undefined);
           e.preventDefault();
           if (n.type !== "box") return;
-          if (!selection.nodes.includes(n.id)) select({nodes: [n.id], edges: []});
-          const rect = root.current!.getBoundingClientRect();
-          setContextMenu({x: Math.max(0, Math.min(e.clientX - rect.left, rect.width - 190)), y: Math.max(0, Math.min(e.clientY - rect.top, rect.height - 250)), box: (n as BoxNodeType).data.box});
+          if (!selectionRef.current.nodes.includes(n.id)) select({nodes: [n.id], edges: []});
+          openMenu(e, selectionRef.current.nodes.length + selectionRef.current.edges.length > 1
+            ? {kind: "selection"} : {kind: "box", box: (n as BoxNodeType).data.box});
+        }}
+        onSelectionContextMenu={e => openMenu(e, {kind: "selection"})}
+        onEdgeContextMenu={(e, edge) => {
+          select({nodes: [], edges: [edge.id]});
+          openMenu(e, {kind: "connection", id: edge.id});
         }}
         onNodeDoubleClick={(_, n) =>
           n.type === "box" && onOpen((n as BoxNodeType).data.box)
@@ -545,19 +587,16 @@ function Graph({
           />
         )}
       </ReactFlow>
-      {portMenu && <div className="graph-context-menu" role="menu" aria-label={`Port ${portMenu.port.name}`} style={{left: portMenu.x, top: portMenu.y}}
-        onKeyDown={e => {
-          const buttons = [...e.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
-          if (e.key === "ArrowDown" || e.key === "ArrowUp") {e.preventDefault(); const at = buttons.indexOf(document.activeElement as HTMLButtonElement); buttons[(at + (e.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length]?.focus();}
-        }}>
-        <button role="menuitem" autoFocus onClick={() => {setEditingPorts(portMenu.ownerId); setPortMenu(undefined);}}>Edit {portMenu.port.name}…</button>
-        {onActivateInput && (portMenu.ownerId === 0 ? portMenu.source : !portMenu.source && portMenu.box.inputs.some(p => p.id === portMenu.port.id)) && <button role="menuitem" onClick={() => {onActivateInput(portMenu.box, portMenu.port); setPortMenu(undefined);}}>Activate input</button>}
-        <button role="menuitem" disabled={!editable || !diagram.links.some(l => portMenu.source ? l.outOwner === portMenu.ownerId && l.outPort === portMenu.port.id : l.inOwner === portMenu.ownerId && l.inPort === portMenu.port.id)} onClick={() => {
+      {portMenu && <ContextMenu {...portMenu} label={`Port ${portMenu.port.name}`} onClose={closeMenus}>
+        <button role="menuitem" onClick={() => {closeMenus(true); setEditingPorts(portMenu.ownerId);}}>Edit {portMenu.port.name}…</button>
+        {onActivateInput && (portMenu.ownerId === 0 ? portMenu.source : !portMenu.source && portMenu.box.inputs.some(p => p.id === portMenu.port.id)) && <button role="menuitem" onClick={() => {closeMenus(true); onActivateInput(portMenu.box, portMenu.port);}}>Activate input</button>}
+        <button role="menuitem" title={!editable ? "This graph is read-only." : "Disconnect links attached to this port."} disabled={!editable || !diagram.links.some(l => portMenu.source ? l.outOwner === portMenu.ownerId && l.outPort === portMenu.port.id : l.inOwner === portMenu.ownerId && l.inPort === portMenu.port.id)} onClick={() => {
           const links = diagram.links.filter(l => portMenu.source ? l.outOwner === portMenu.ownerId && l.outPort === portMenu.port.id : l.inOwner === portMenu.ownerId && l.inPort === portMenu.port.id);
-          void onEdit?.("Disconnect port", [{type: "remove", nodes: links.flatMap(l => l.node === undefined ? [] : [l.node])}]); setPortMenu(undefined);
+          closeMenus(true);
+          void onEdit?.("Disconnect port", [{type: "remove", nodes: links.flatMap(l => l.node === undefined ? [] : [l.node])}]);
         }}>Disconnect links</button>
-        <button role="menuitem" disabled={!editable || portMenu.port.node === undefined} onClick={() => {void onEdit?.("Delete port", [{type: "remove", nodes: [portMenu.port.node!]}]); setPortMenu(undefined);}}>Delete port</button>
-      </div>}
+        <button role="menuitem" title={!editable ? "This graph is read-only." : undefined} disabled={!editable || portMenu.port.node === undefined} onClick={() => {closeMenus(true); void onEdit?.("Delete port", [{type: "remove", nodes: [portMenu.port.node!]}]);}}>Delete port</button>
+      </ContextMenu>}
       {portBox && editingPorts !== undefined && <Modal title={`Port properties: ${portBox.name}`} wide onClose={() => setEditingPorts(undefined)}>
         <Inspector boxes={[{...portBox, id: 1}]} onEdit={onEdit} onScript={() => {setEditingPorts(undefined); onOpen(portBox);}} />
       </Modal>}
@@ -566,17 +605,22 @@ function Graph({
           void onEdit?.("Connect parameter", [{type: "addLink", diagram: diagram.node!, outOwner: parameterLink.outOwner, outPort: parameterLink.outPort, inOwner: parameterLink.box.id, inPort: p.id}]); setParameterLink(undefined);
         }}>{p.name}</button>)}</div>
       </Modal>}
-      {contextMenu && <div className="graph-context-menu" role="menu" aria-label="Diagram actions" style={{left: contextMenu.x, top: contextMenu.y}}
-        onKeyDown={e => {
-          const buttons = [...e.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
-          if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); const at = buttons.indexOf(document.activeElement as HTMLButtonElement); buttons[(at + (e.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length]?.focus(); }
-        }}>
-        {contextMenu.box && <button role="menuitem" autoFocus onClick={() => {onOpen(contextMenu.box!); setContextMenu(undefined);}}>Open {contextMenu.box.name}</button>}
-        {[["insert", "Create a new box…"], ["cut", "Cut"], ["copy", "Copy"], ["paste", "Paste"], ["delete", "Delete"], ["convert-to-box", "Convert to box…"]].map(([id,label],i) => <button role="menuitem" key={id} autoFocus={!contextMenu.box && i === 0}
-          disabled={!editable || (["cut", "copy", "delete", "convert-to-box"].includes(id) && !selection.nodes.length)}
-          onClick={() => {onCommand?.(id); setContextMenu(undefined);}}>{label}</button>)}
-        <button role="menuitem" onClick={() => {controls.fit(); setContextMenu(undefined);}}>Fit graph</button>
-      </div>}
+      {contextMenu && <ContextMenu x={contextMenu.x} y={contextMenu.y} label="Diagram actions" onClose={closeMenus}>
+        {target?.kind === "selection" && <span className="graph-menu-heading">{selectionCount} selected</span>}
+        {target?.kind === "box" && <>
+          <button role="menuitem" onClick={() => {closeMenus(true); onOpen(target.box);}}>Open {target.box.name}</button>
+          <button role="menuitem" disabled={!onParameters} onClick={() => {closeMenus(true); onParameters?.(target.box);}}>Properties</button>
+        </>}
+        {menuCommands.map(([id, label]) => {
+          const command = commands.find(c => c.id === id);
+          const enabled = editable && !!command?.enabled;
+          return <button role="menuitem" key={id} disabled={!enabled}
+            title={!enabled ? command?.reason ?? "This graph is read-only." : undefined}
+            onClick={() => {closeMenus(true); onCommand?.(id);}}>{label}</button>;
+        })}
+        {target?.kind === "canvas" && <button role="menuitem" onClick={() => {closeMenus(true); controls.fit();}}>Fit graph</button>}
+        {target?.kind === "selection" && <button role="menuitem" onClick={() => {closeMenus(true); controls.fitSelection();}}>Fit selection</button>}
+      </ContextMenu>}
       {!diagram.boxes.length && (
         <div className="canvas-message">This diagram has no boxes.</div>
       )}
