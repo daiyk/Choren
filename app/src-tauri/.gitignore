@@ -8,3 +8,6 @@
 
 # Bundled CPython, fetched by scripts/fetch-python-runtime.sh
 /python-runtime/
+
+# License notices, written by scripts/third-party-notices.py
+/licenses/

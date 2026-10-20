@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build && bash ../scripts/fetch-python-runtime.sh",
+    "beforeBuildCommand": "npm run build && bash ../scripts/fetch-python-runtime.sh && python3 ../scripts/third-party-notices.py",
     "frontendDist": "../dist"
   },
   "app": {
@@ -35,7 +35,10 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "copyright": "Copyright (c) 2026, Yukun Dai",
+    "license": "BSD-3-Clause",
     "resources": {
+      "licenses/": "licenses/",
       "../../library/choren/": "library/choren/",
       "../../python/choren_host/": "python/choren_host/",
       "python-runtime/": "python-runtime/"
