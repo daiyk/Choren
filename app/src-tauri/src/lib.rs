@@ -61,6 +61,7 @@ pub fn run() {
             project::project_export_motion_python,
             project::project_import_qianim,
             library::library_index,
+            library::library_tree,
             library::library_share_dir,
             library::library_box,
             library::library_create,

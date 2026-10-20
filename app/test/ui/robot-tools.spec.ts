@@ -89,7 +89,7 @@ async function backend(page: Page) {
                 virtual: true,
               };
             if (command === "robot_status") return null;
-            if (command === "library_index") return [];
+            if (command === "library_tree") return [];
             if (command === "robot_descriptor") return descriptor;
             if (command === "robot_mesh") {
               if (localStorage.getItem("test-mesh-error")) throw "Cannot read mesh naoHeadYaw: No such file or directory";

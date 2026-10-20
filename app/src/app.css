@@ -1826,3 +1826,4 @@ textarea.inspector-field {
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+.studio-context-menu { position: fixed; z-index: 10000; min-width: 180px; }

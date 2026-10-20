@@ -36,7 +36,7 @@ import type { EditCommand } from "../workspace/authoring";
 import { Modal } from "../workspace/Modal";
 import { Inspector } from "../Inspector";
 import type { Command } from "../workspace/registry";
-import { ContextMenu } from "./ContextMenu";
+import { ContextMenu } from "../workspace/ContextMenu";
 
 type MenuTarget = { kind: "canvas" } | { kind: "box"; box: Box } |
   { kind: "selection" } | { kind: "connection"; id: string };
@@ -220,8 +220,7 @@ function Graph({
     menuTrigger.current = (event.target as Element).closest(
       ".react-flow__handle,.react-flow__node-box,.react-flow__edge,.react-flow__nodesselection-rect",
     ) ?? root.current;
-    const rect = root.current!.getBoundingClientRect();
-    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    return { x: event.clientX, y: event.clientY };
   };
   const [size, setSize] = useState({ width: 800, height: 600 });
   const [minimap, setMinimap] = useState(false);
@@ -587,7 +586,7 @@ function Graph({
           />
         )}
       </ReactFlow>
-      {portMenu && <ContextMenu {...portMenu} label={`Port ${portMenu.port.name}`} onClose={closeMenus}>
+      {portMenu && <ContextMenu boundary={root.current} {...portMenu} label={`Port ${portMenu.port.name}`} onClose={closeMenus}>
         <button role="menuitem" onClick={() => {closeMenus(true); setEditingPorts(portMenu.ownerId);}}>Edit {portMenu.port.name}…</button>
         {onActivateInput && (portMenu.ownerId === 0 ? portMenu.source : !portMenu.source && portMenu.box.inputs.some(p => p.id === portMenu.port.id)) && <button role="menuitem" onClick={() => {closeMenus(true); onActivateInput(portMenu.box, portMenu.port);}}>Activate input</button>}
         <button role="menuitem" title={!editable ? "This graph is read-only." : "Disconnect links attached to this port."} disabled={!editable || !diagram.links.some(l => portMenu.source ? l.outOwner === portMenu.ownerId && l.outPort === portMenu.port.id : l.inOwner === portMenu.ownerId && l.inPort === portMenu.port.id)} onClick={() => {
@@ -605,7 +604,7 @@ function Graph({
           void onEdit?.("Connect parameter", [{type: "addLink", diagram: diagram.node!, outOwner: parameterLink.outOwner, outPort: parameterLink.outPort, inOwner: parameterLink.box.id, inPort: p.id}]); setParameterLink(undefined);
         }}>{p.name}</button>)}</div>
       </Modal>}
-      {contextMenu && <ContextMenu x={contextMenu.x} y={contextMenu.y} label="Diagram actions" onClose={closeMenus}>
+      {contextMenu && <ContextMenu boundary={root.current} x={contextMenu.x} y={contextMenu.y} label="Diagram actions" onClose={closeMenus}>
         {target?.kind === "selection" && <span className="graph-menu-heading">{selectionCount} selected</span>}
         {target?.kind === "box" && <>
           <button role="menuitem" onClick={() => {closeMenus(true); onOpen(target.box);}}>Open {target.box.name}</button>

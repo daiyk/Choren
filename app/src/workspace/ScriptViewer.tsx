@@ -18,10 +18,13 @@ import {
 import { python } from "@codemirror/lang-python";
 import {
   search,
+  openSearchPanel,
   searchKeymap,
   highlightSelectionMatches,
 } from "@codemirror/search";
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { defaultKeymap, history, historyKeymap, undo, redo, undoDepth, redoDepth } from "@codemirror/commands";
+import { useWorkspace } from "./context";
+import { useContextMenu, type MenuAction } from "./ContextMenu";
 import type { Box } from "../format/types";
 export function ScriptViewer({
   box,
@@ -38,6 +41,7 @@ export function ScriptViewer({
   /** Reports the editor text when it differs from the document, `undefined` when it does not. */
   onDraft?: (text: string | undefined) => void;
 }) {
+  const ws = useWorkspace();
   const [fontSize, setFontSize] = useState(() => Number(readPreference("choren.script-font")) || 12);
   const [tabSize, setTabSize] = useState(() => Number(readPreference("choren.script-indent")) || 4);
   const [wrap, setWrap] = useState(() => readPreference("choren.script-wrap") === true);
@@ -50,6 +54,7 @@ export function ScriptViewer({
   const committed = useRef(box.script);
   const [changed, setChanged] = useState(false);
   const editable = !!onSave;
+  const menu = useContextMenu([ws.state.session, ws.history?.revision, box.node ?? box.name, box.script, editable, changed], setValidation);
   const draft = useRef(onDraft);
   draft.current = onDraft;
   const report = (text: string) => {
@@ -141,19 +146,29 @@ export function ScriptViewer({
     view.current?.dispatch({effects: preferences.current.reconfigure(preferenceExtensions())});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fontSize, tabSize, wrap]);
+  const checkSyntax = () => {
+    const state = view.current?.state;
+    if (!state) return;
+    const tree = ensureSyntaxTree(state, state.doc.length, 1000);
+    if (!tree) {setValidation("The script is too large to finish checking. Check smaller sections."); return;}
+    const lines = new Set<number>();
+    tree.iterate({enter: node => {if (node.type.isError) lines.add(state.doc.lineAt(node.from).number);}});
+    setValidation(lines.size ? `Syntax errors near line${lines.size > 1 ? "s" : ""} ${[...lines].join(", ")}.` : "No syntax errors found by the editor grammar.");
+  };
+  const actions = (): MenuAction[] => [
+    {label: "Find…", run: () => { if (view.current) openSearchPanel(view.current); }},
+    {label: "Undo typing", disabled: !editable || !view.current || undoDepth(view.current.state) === 0, reason: "Nothing to undo in this script draft.", run: () => {if (view.current) undo(view.current);}},
+    {label: "Redo typing", disabled: !editable || !view.current || redoDepth(view.current.state) === 0, reason: "Nothing to redo in this script draft.", run: () => {if (view.current) redo(view.current);}},
+    {label: "Check syntax", run: checkSyntax},
+    {label: "Wrap lines", checked: wrap, run: () => setWrap(!wrap)},
+    {label: "Apply to box", disabled: !editable || !changed, reason: editable ? "There are no unapplied changes." : "This script is read-only.", run: () => {if (view.current) onSave?.(view.current.state.doc.toString());}},
+  ];
   return (
-    <section className="script-view">
+    <section className="script-view" tabIndex={0} aria-label="Script editor actions" {...menu.trigger(actions)}>
+      {menu.element}
       <div className="panel-toolbar">
         <span>{box.name}</span>
-        <button onClick={() => {
-          const state = view.current?.state;
-          if (!state) return;
-          const tree = ensureSyntaxTree(state, state.doc.length, 1000);
-          if (!tree) {setValidation("The script is too large to finish checking. Check smaller sections."); return;}
-          const lines = new Set<number>();
-          tree.iterate({enter: node => {if (node.type.isError) lines.add(state.doc.lineAt(node.from).number);}});
-          setValidation(lines.size ? `Syntax errors near line${lines.size > 1 ? "s" : ""} ${[...lines].join(", ")}.` : "No syntax errors found by the editor grammar.");
-        }}>Check syntax</button>
+        <button onClick={checkSyntax}>Check syntax</button>
         <label>Font<select aria-label="Script font size" value={fontSize} onChange={e => setFontSize(Number(e.target.value))}>{[10,12,14,16,18,20,24].map(v => <option key={v} value={v}>{v} px</option>)}</select></label>
         <label>Indent<select aria-label="Script indent size" value={tabSize} onChange={e => setTabSize(Number(e.target.value))}>{[2,4,8].map(v => <option key={v} value={v}>{v} spaces</option>)}</select></label>
         <label className="checkbox"><input type="checkbox" checked={wrap} onChange={e => setWrap(e.target.checked)} />Wrap lines</label>

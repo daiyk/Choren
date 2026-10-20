@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getRobot, robot, useRobot } from "./store";
+import { useContextMenu } from "../workspace/ContextMenu";
 
 type Kind = "Behavior" | "Dialog";
 interface Entry {id: string; name: string; kind: Kind; start: number; end?: number}
@@ -15,6 +16,8 @@ export function ActiveContentPanel() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const menu = useContextMenu([status, entries.map(e => `${e.id}:${e.end ?? "active"}`).join("|"), busy], e => setError(String(e)));
+  const clearHistory = () => setEntries(current => current.filter(e => e.end === undefined));
   useEffect(() => {
     let live = true;
     let timer: ReturnType<typeof setTimeout>;
@@ -55,10 +58,13 @@ export function ActiveContentPanel() {
   const formatTime = (value: number) => timestamp === "milliseconds" ? String(value) : timestamp === "seconds" ? (value / 1000).toFixed(3) : new Date(value).toLocaleString();
   const active = entries.filter(e => e.end === undefined);
   const visible = entries.filter(e => (history || e.end === undefined) && (!kind || e.kind === kind) && e.name.toLowerCase().includes(filter.toLowerCase()));
-  return <div className="panel-column">
+  return <div className="panel-column" tabIndex={0} {...menu.trigger(() => [
+    {label: "Stop all active content", run: () => stop(active), disabled: !status || busy || !active.length, reason: !status ? "Connect to a robot first." : busy ? "Wait for the current operation." : "No active content."},
+    {label: "Clear history", run: clearHistory},
+  ])}>{menu.element}
     <div className="panel-toolbar"><strong>Active content ({active.length})</strong><span className="spacer" />
       <button disabled={!status || busy || !active.length} onClick={() => void stop(active)}>Stop all active content</button>
-      <button onClick={() => setEntries(current => current.filter(e => e.end === undefined))}>Clear history</button>
+      <button onClick={clearHistory}>Clear history</button>
     </div>
     <div className="panel-toolbar"><input aria-label="Filter active content" placeholder="Filter by name" value={filter} onChange={e => setFilter(e.target.value)} />
       <select aria-label="Content type" value={kind} onChange={e => setKind(e.target.value)}><option value="">All types</option><option>Behavior</option><option>Dialog</option></select>
@@ -68,7 +74,10 @@ export function ActiveContentPanel() {
     {error && <p className="error" role="alert">{error}</p>}
     <div className="panel-scroll"><p className="panel-message">{status ? "Observed while this panel is connected. Times mark when activity was first or last seen; up to 500 finished entries are kept." : "Connect to a robot to inspect active content."}</p>
       <table className="active-content-table"><thead><tr>{["Name", "Type", "Status", "First seen", "Last seen", "Duration", "Action"].map(v => <th key={v}>{v}</th>)}</tr></thead><tbody>
-        {visible.map(e => <tr key={e.id}><td>{e.name}</td><td>{e.kind}</td><td>{e.end === undefined ? "Running" : "Stopped"}</td><td>{formatTime(e.start)}</td><td>{e.end === undefined ? "—" : formatTime(e.end)}</td><td>{Math.max(0, ((e.end ?? now) - e.start) / 1000).toFixed(1)} s</td><td><button aria-label={`Stop ${e.kind.toLowerCase()} ${e.name}`} disabled={!status || busy || e.end !== undefined} onClick={() => void stop([e])}>Stop</button></td></tr>)}
+        {visible.map(e => <tr key={e.id} tabIndex={0} {...menu.trigger(() => [
+          {label: "Stop active item", run: () => stop([e]), disabled: !status || busy || e.end !== undefined, reason: !status ? "Connect to a robot first." : busy ? "Wait for the current operation." : "This item has stopped."},
+          {label: "Copy name", run: () => navigator.clipboard.writeText(e.name)},
+        ])}><td>{e.name}</td><td>{e.kind}</td><td>{e.end === undefined ? "Running" : "Stopped"}</td><td>{formatTime(e.start)}</td><td>{e.end === undefined ? "—" : formatTime(e.end)}</td><td>{Math.max(0, ((e.end ?? now) - e.start) / 1000).toFixed(1)} s</td><td><button aria-label={`Stop ${e.kind.toLowerCase()} ${e.name}`} disabled={!status || busy || e.end !== undefined} onClick={() => void stop([e])}>Stop</button></td></tr>)}
       </tbody></table>
     </div>
   </div>;

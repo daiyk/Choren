@@ -26,7 +26,7 @@ async function backend(page: Page) {
           calls.push({ command, args });
           if (command === "plugin:menu|new") return [++rid, String(rid)];
           if (command.startsWith("plugin:")) return;
-          if (command === "library_index") return [];
+          if (command === "library_tree") return [];
           if (command === "robot_status")
             return localStorage.getItem("mock-connected") ? status : null;
           if (command === "robot_models") return [{ id: "nao6", name: "NAO 6" }];

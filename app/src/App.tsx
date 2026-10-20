@@ -1,3 +1,5 @@
+import { useContextMenu } from "./workspace/ContextMenu";
+import type { CommandTarget } from "./workspace/context";
 import { Layouts } from "./workspace/Layouts";
 import {
   useCallback,
@@ -9,6 +11,8 @@ import {
 } from "react";
 import {
   DockviewReact,
+  DockviewDefaultTab,
+  type IDockviewPanelHeaderProps,
   type DockviewApi,
   type IDockviewHeaderActionsProps,
   type DockviewReadyEvent,
@@ -175,11 +179,25 @@ function defaultLayout(api: DockviewApi) {
   });
   center.api.setActive();
 }
+function PanelTab(props: IDockviewPanelHeaderProps) {
+  const ws = useWorkspace();
+  const menu = useContextMenu([props.api.id, ws.state.activeBehavior, ws.state.project], message => ws.notify(message, "error"));
+  return <><DockviewDefaultTab {...props} tabIndex={0} {...menu.trigger(() => [
+    {label: props.api.isMaximized() ? "Restore panel" : "Maximize panel", run: () => props.api.isMaximized() ? props.api.exitMaximized() : props.api.maximize()},
+    {label: "Move or resize…", run: () => ws.managePanel(props.api.id)},
+    {label: "Close panel", run: () => props.api.close()},
+  ])} />{menu.element}</>;
+}
 function HeaderActions({ activePanel }: IDockviewHeaderActionsProps) {
   const ws = useWorkspace();
+  const menu = useContextMenu([activePanel?.id, ws.state.activeBehavior], message => ws.notify(message, "error"));
   if (!activePanel) return null;
   return (
-    <div className="panel-actions">
+    <div className="panel-actions" tabIndex={0} {...menu.trigger(() => [
+      {label: activePanel.api.isMaximized() ? "Restore panel" : "Maximize panel", run: () => activePanel.api.isMaximized() ? activePanel.api.exitMaximized() : activePanel.api.maximize()},
+      {label: "Move or resize…", run: () => ws.managePanel(activePanel.id)},
+      {label: "Close panel", run: () => activePanel.api.close()},
+    ])}>{menu.element}
       <button
         className="icon-button"
         aria-label={`Maximize ${activePanel.title}`}
@@ -243,6 +261,9 @@ export default function App() {
     | undefined
   >(() => (native && !getShareDir() && readPreference(WELCOME_KEY) !== "done" ? "welcome" : undefined));
   const [importKind, setImportKind] = useState<ImportKind>("behavior");
+  const [importDestination, setImportDestination] = useState("");
+  const [propertiesBehavior, setPropertiesBehavior] = useState<string>();
+  const [groupTarget, setGroupTarget] = useState<{project: ProjectDocument; address: GraphAddress; nodes: number[]}>();
   const [convertName, setConvertName] = useState("Box");
   const [behaviorForm, setBehaviorForm] = useState<{
     name: string;
@@ -376,7 +397,9 @@ export default function App() {
     savePreference(THEME_KEY, colorMode);
     return () => media.removeEventListener("change", update);
   }, [colorMode]);
-  const execute = useCallback((id: string) => {
+  const targetedCommand = useRef<(id: string, target: CommandTarget) => void>(() => {});
+  const execute = useCallback((id: string, target?: CommandTarget) => {
+    if (target) { targetedCommand.current(id, target); return; }
     const command = commandRef.current.find((c) => c.id === id);
     if (command?.enabled) command.run();
   }, []);
@@ -794,6 +817,65 @@ export default function App() {
       if (active) openBehavior(active);
     }
   }, [openBehavior]);
+  const runTargeted = (id: string, target: CommandTarget) => {
+    const project = stateRef.current.project;
+    if (!project) return;
+    const behaviorId = target.behaviorId ?? target.address?.behaviorId;
+    const behavior = project.behaviors.find(b => b.id === behaviorId);
+    const valid = () => stateRef.current.project === project;
+    const fail = (error: unknown) => setNotice(String(error), "error");
+    if (id.startsWith("import-")) {
+      if (!isEditable || project.format !== "pml") return;
+      setImportDestination(target.destination ?? "");
+      setImportKind(id.slice(7) as ImportKind); setModal("import"); return;
+    }
+    if (!isEditable) return;
+    if (id === "properties") {
+      if (project.format !== "pml") return;
+      void authoring.manifest(session).then(m => {
+        if (!m || !valid()) return;
+        setPropertiesBehavior(behavior?.source.replace(/\/behavior\.xar$/, ""));
+        setManifest(m); setModal("properties");
+      }, fail); return;
+    }
+    if (!behavior) return;
+    if (id === "remove-behavior") {
+      if (project.format !== "pml") return;
+      const prefix = `script:${behavior.id}:node`;
+      const hasDrafts = [...drafts.current.keys()].some(key => key.startsWith(prefix));
+      if (!confirm(`Remove "${behavior.name}" from the project? Its files stay on disk.${hasDrafts ? " Unapplied script changes will be discarded." : ""}`) || !valid()) return;
+      void change(() => authoring.removeBehavior(session, behavior.id)).then(result => {
+        if (!result) return;
+        for (const key of drafts.current.keys()) if (key.startsWith(prefix)) drafts.current.delete(key);
+        for (const panel of dockRef.current?.panels ?? [])
+          if ((panel.params?.kind === "graph" && panel.params.behaviorId === behavior.id) ||
+            (panel.params?.kind === "script" && panel.params.scriptId?.startsWith(prefix))) panel.api.close();
+      }); return;
+    }
+    if (id === "export-crg") {
+      void (async () => {
+        const path = await saveFile({filters: [{name: "Behavior archive", extensions: ["crg"]}], defaultPath: `${behavior.name}.crg`});
+        if (!path || !valid()) return;
+        await authoring.exportCrg(session, behavior.id, path); setNotice(`Exported ${path}`);
+      })().catch(fail); return;
+    }
+    if (!target.address) return;
+    const diagram = resolveAddress(project, target.address)?.diagram;
+    const boxes = diagram?.boxes.filter(b => target.boxId === undefined
+      ? (stateRef.current.selections[graphId(project.id, target.address!)]?.nodes ?? []).includes(String(b.id))
+      : b.id === target.boxId) ?? [];
+    const nodes = boxes.flatMap(b => b.node === undefined ? [] : [b.node]);
+    if (!nodes.length) return;
+    if (id === "convert-to-box") {
+      setGroupTarget({project, address: target.address, nodes}); setModal("convert");
+    } else if (id === "delete") void edit("Delete box", [{type: "remove", nodes}], behavior.id);
+    else if (id === "copy" || id === "cut") void authoring.copy(session, behavior.id, nodes).then(xml => {
+      if (!valid()) return;
+      setClipboard(xml);
+      if (id === "cut") void edit("Cut boxes", [{type: "remove", nodes}], behavior.id);
+    }, fail);
+  };
+  targetedCommand.current = runTargeted;
   const commands: Command[] = [
     ...(["behavior", "files", "folder"] as const).map((kind): Command => ({
       id: `import-${kind}`,
@@ -801,7 +883,7 @@ export default function App() {
       group: "File",
       enabled: isEditable && state.project?.format === "pml",
       reason: isEditable ? "Imports need a .pml project. Use Save as project folder first." : readOnlyReason,
-      run: () => { setImportKind(kind); setModal("import"); },
+      run: () => runTargeted(`import-${kind}`, {}),
     })),
     {
       id: "open",
@@ -860,36 +942,7 @@ export default function App() {
       reason: isEditable
         ? "Select a behavior of a .pml project."
         : readOnlyReason,
-      run: () => {
-        const id = stateRef.current.activeBehavior;
-        if (!id) return;
-        const name = stateRef.current.project?.behaviors.find(
-          (b) => b.id === id,
-        )?.name;
-        const scriptPrefix = `script:${id}:node`;
-        const hasDrafts = [...drafts.current.keys()].some((key) =>
-          key.startsWith(scriptPrefix),
-        );
-        if (
-          !confirm(
-            `Remove "${name}" from the project? Its files stay on disk.${hasDrafts ? " Unapplied script changes will be discarded." : ""}`,
-          )
-        )
-          return;
-        void change(() => authoring.removeBehavior(session, id)).then((r) => {
-          if (!r) return;
-          for (const key of drafts.current.keys())
-            if (key.startsWith(scriptPrefix)) drafts.current.delete(key);
-          for (const panel of dockRef.current?.panels ?? [])
-            if (
-              (panel.params?.kind === "graph" &&
-                panel.params.behaviorId === id) ||
-              (panel.params?.kind === "script" &&
-                panel.params.scriptId?.startsWith(scriptPrefix))
-            )
-              panel.api.close();
-        });
-      },
+      run: () => runTargeted("remove-behavior", {behaviorId: stateRef.current.activeBehavior}),
     },
     {
       id: "properties",
@@ -899,16 +952,7 @@ export default function App() {
       reason: isEditable
         ? "Project properties belong to .pml projects."
         : readOnlyReason,
-      run: () =>
-        void authoring.manifest(session).then(
-          (m) => {
-            if (m) {
-              setManifest(m);
-              setModal("properties");
-            }
-          },
-          (e) => setNotice(String(e), "error"),
-        ),
+      run: () => runTargeted("properties", {}),
     },
     {
       id: "save-as-folder",
@@ -978,20 +1022,7 @@ export default function App() {
       group: "File",
       enabled: isEditable && !!state.activeBehavior,
       reason: isEditable ? "Open a behavior first." : readOnlyReason,
-      run: () =>
-        void (async () => {
-          const behavior = stateRef.current.activeBehavior!;
-          const name =
-            stateRef.current.project?.behaviors.find((b) => b.id === behavior)
-              ?.name ?? "behavior";
-          const path = await saveFile({
-            filters: [{ name: "Choregraphe 1.x archive", extensions: ["crg"] }],
-            defaultPath: `${name}.crg`,
-          });
-          if (!path) return;
-          await authoring.exportCrg(session, behavior, path);
-          setNotice(`Exported ${path}`);
-        })().catch((e) => setNotice(String(e), "error")),
+      run: () => runTargeted("export-crg", {behaviorId: stateRef.current.activeBehavior}),
     },
     {
       id: "update-translations",
@@ -1129,7 +1160,7 @@ export default function App() {
         !!currentDiagram &&
         !!selection.nodes.length,
       reason: isEditable ? "Select boxes in a diagram." : readOnlyReason,
-      run: () => setModal("convert"),
+      run: () => { if (address) runTargeted("convert-to-box", {address}); },
     },
     {
       id: "connect",
@@ -1391,6 +1422,7 @@ export default function App() {
   useEffect(() => {
     if (!dock) return;
     const active = dock.onDidActivePanelChange(({ panel }) => {
+      window.dispatchEvent(new Event("studio-context-dismiss"));
       if (!panel) return;
       const params = panel.params as WorkspacePanelParams;
       if (params.kind === "graph" && params.behaviorId) {
@@ -1703,6 +1735,7 @@ export default function App() {
         >
           <DockviewReact
             components={components}
+            defaultTabComponent={PanelTab}
             watermarkComponent={Welcome}
             theme={studioTheme}
             dndStrategy="pointer"
@@ -1823,7 +1856,7 @@ export default function App() {
           />
         )}
         {modal === "connection" && <Connection onClose={() => setModal(undefined)} onConnected={() => showPanel("robot")} />}
-        {modal === "import" && <ImportContent kind={importKind} onClose={() => setModal(undefined)} />}
+        {modal === "import" && <ImportContent initialDestination={importDestination} kind={importKind} onClose={() => setModal(undefined)} />}
         {modal === "new-behavior" && (
           <Modal
             title="New behavior"
@@ -1953,17 +1986,19 @@ export default function App() {
               className="settings-content"
               onSubmit={(e) => {
                 e.preventDefault();
-                const diagram = currentDiagram?.node;
-                if (diagram === undefined) return;
+                const diagram = groupTarget && resolveAddress(groupTarget.project, groupTarget.address)?.diagram?.node;
+                if (diagram === undefined || !groupTarget || stateRef.current.project !== groupTarget.project) {
+                  setModal(undefined); setNotice("The diagram changed. Select the boxes again.", "error"); return;
+                }
                 setModal(undefined);
-                void edit("Convert selection to box", [
+                void edit("Group into box", [
                   {
                     type: "convertToBox",
                     diagram,
-                    boxes: selectedNodes().boxes.map((b) => b.node!),
+                    boxes: groupTarget.nodes,
                     name: convertName,
                   },
-                ]);
+                ], groupTarget.address.behaviorId);
               }}
             >
               <label className="setting">
@@ -2032,7 +2067,7 @@ export default function App() {
             </form>
           </Modal>
         )}
-        {modal === "properties" && manifest && <ProjectProperties initial={manifest}
+        {modal === "properties" && manifest && <ProjectProperties initialBehaviorPath={propertiesBehavior} initial={manifest}
           onClose={() => setModal(undefined)} onApply={m => change(() => authoring.setManifest(session, m))}
           onRaw={() => {
             const file = state.project?.files.find(f => f.kind === "manifest");

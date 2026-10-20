@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getRobot, robot, useRobot } from "./store";
+import { useContextMenu } from "../workspace/ContextMenu";
 
 interface ServiceMeta {
   description: string;
@@ -18,6 +19,7 @@ export function ServicesPanel() {
   const [result, setResult] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const menu = useContextMenu([status, service, method, result, meta, busy], e => setError(String(e)));
   useEffect(() => {
     let live = true;
     setServices([]); setMeta(undefined); setService(""); setResult(""); setError("");
@@ -31,7 +33,7 @@ export function ServicesPanel() {
     return () => {live = false;};
   }, [status, service]);
   const selected = meta?.methods.find(m => String(m.id) === method);
-  return <div className="panel-column"><form className="settings-content" aria-label="Service call" onSubmit={async e => {
+  return <div className="panel-column">{menu.element}<form className="settings-content" aria-label="Service call" onSubmit={async e => {
     e.preventDefault(); if (!selected || busy) return;
     setError(""); setBusy(true);
     try {
@@ -50,8 +52,8 @@ export function ServicesPanel() {
     <label>Arguments (JSON array)<textarea aria-label="Method arguments" disabled={busy} value={args} onChange={e => setArgs(e.target.value)} spellCheck={false} /></label>
     <button type="submit" disabled={!status || !selected || busy}>{busy ? "Calling…" : "Call method"}</button>
     {error && <p className="error" role="alert">{error}</p>}
-  </form><pre className="panel-scroll service-result" aria-label="Service result">{result}</pre>
-    {!!meta?.signals.length && <details className="settings-content"><summary>Signals</summary>{meta.signals.map(s => <div key={s.name}>{s.name} {s.signature}</div>)}</details>}
+  </form><pre className="panel-scroll service-result" aria-label="Service result" tabIndex={0} {...menu.trigger(() => [{label: "Copy result", run: () => navigator.clipboard.writeText(result), disabled: !result, reason: "Call a method to get a result."}])}>{result}</pre>
+    {!!meta?.signals.length && <details className="settings-content"><summary>Signals</summary>{meta.signals.map(s => <div key={s.name} tabIndex={0} {...menu.trigger(() => [{label: "Copy signal name", run: () => navigator.clipboard.writeText(s.name)}, {label: "Copy signature", run: () => navigator.clipboard.writeText(s.signature)}])}>{s.name} {s.signature}</div>)}</details>}
   </div>;
 }
 
@@ -61,6 +63,7 @@ export function ApplicationsPanel() {
   const [installed, setInstalled] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const menu = useContextMenu([status, installed, running, busy], e => setError(String(e)));
   const refresh = async () => {
     if (!status || getRobot().status !== status) return;
     const names = await robot.call("ALBehaviorManager", "getInstalledBehaviors");
@@ -74,11 +77,15 @@ export function ApplicationsPanel() {
     setBusy(true); setError("");
     try {await work(); await refresh();} catch (e) {setError(String(e));} finally {setBusy(false);}
   };
-  return <div className="panel-column"><div className="panel-toolbar"><button disabled={!status || busy} onClick={() => void run(refresh)}>Refresh applications</button></div>
+  const refreshAction = () => ({label: "Refresh applications", run: () => run(refresh), disabled: !status || busy, reason: !status ? "Connect to a robot first." : "Wait for the current operation."});
+  const toggle = (name: string) => run(() => robot.call("ALBehaviorManager", running.includes(name) ? "stopBehavior" : "startBehavior", name));
+  return <div className="panel-column" tabIndex={0} {...menu.trigger(() => [refreshAction()])}>{menu.element}<div className="panel-toolbar"><button disabled={!status || busy} onClick={() => void run(refresh)}>Refresh applications</button></div>
     {error && <p className="error" role="alert">{error}</p>}
-    <div className="panel-scroll">{!status ? <p className="panel-message">Connect to a robot to see its installed behaviors.</p> : !installed.length ? <p className="panel-message">No installed behaviors.</p> : installed.map(name => <div className="panel-toolbar" key={name}>
+    <div className="panel-scroll">{!status ? <p className="panel-message">Connect to a robot to see its installed behaviors.</p> : !installed.length ? <p className="panel-message">No installed behaviors.</p> : installed.map(name => <div className="panel-toolbar" key={name} tabIndex={0} {...menu.trigger(() => [
+      {label: running.includes(name) ? "Stop behavior" : "Run behavior", run: () => toggle(name), disabled: !status || busy, reason: !status ? "Connect to a robot first." : "Wait for the current operation."}, refreshAction(),
+    ])}>
       <span>{name}</span><span className="spacer" /><span>{running.includes(name) ? "Running" : "Stopped"}</span>
-      <button disabled={busy} onClick={() => void run(() => robot.call("ALBehaviorManager", running.includes(name) ? "stopBehavior" : "startBehavior", name))}>{running.includes(name) ? "Stop" : "Run"}</button>
+      <button disabled={busy} onClick={() => void toggle(name)}>{running.includes(name) ? "Stop" : "Run"}</button>
     </div>)}</div>
   </div>;
 }
@@ -88,6 +95,8 @@ export function CameraPanel() {
   const [camera, setCamera] = useState(0);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState("");
+  const menu = useContextMenu([status, streaming, camera], e => setError(String(e)));
+  const toggle = () => {setError(""); setStreaming(!streaming);};
   const canvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {setStreaming(false); setError("");}, [status]);
   useEffect(() => {
@@ -118,9 +127,12 @@ export function CameraPanel() {
     }).catch(e => {if (live) {setError(String(e)); setStreaming(false);}});
     return () => {live = false; clearTimeout(timer); void stop();};
   }, [status, streaming, camera]);
-  return <div className="panel-column"><div className="panel-toolbar">
+  return <div className="panel-column" tabIndex={0} {...menu.trigger(() => [
+    {label: streaming ? "Stop camera" : "Start camera", run: toggle, disabled: !status || status.virtual, reason: !status ? "Connect to a robot first." : "The virtual robot has no camera sensor."},
+    ...["Top camera", "Bottom camera"].map((label, index) => ({label, checked: camera === index, run: () => setCamera(index), disabled: streaming, reason: "Stop the camera before switching."})),
+  ])}>{menu.element}<div className="panel-toolbar">
     <select aria-label="Robot camera" disabled={streaming} value={camera} onChange={e => setCamera(Number(e.target.value))}><option value={0}>Top camera</option><option value={1}>Bottom camera</option></select>
-    <button disabled={!status || status.virtual} onClick={() => {setError(""); setStreaming(!streaming);}}>{streaming ? "Stop camera" : "Start camera"}</button>
+    <button disabled={!status || status.virtual} onClick={toggle}>{streaming ? "Stop camera" : "Start camera"}</button>
   </div>{status?.virtual && <p className="panel-message">The virtual robot has no camera sensor.</p>}
     {error && <p className="error" role="alert">{error}</p>}<canvas ref={canvas} className="camera-image" aria-label="Robot camera image" />
   </div>;

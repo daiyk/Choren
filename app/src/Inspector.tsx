@@ -6,6 +6,7 @@ import { scriptOpenable } from "./workspace/model";
 import { categories, CategoryBadge, isBoxCategory } from "./diagram/appearance";
 import type { Box, Param, ProjectDocument, ProjectFile } from "./format/types";
 import { behaviorRelative } from "./format/xml";
+import { useContextMenu, type MenuAction } from "./workspace/ContextMenu";
 import {
   CONTENT_TYPE,
   INPUT_NATURE,
@@ -321,6 +322,13 @@ export function Inspector({
   file?: ProjectFile;
   onScript: (box: Box) => void;
 }) {
+  const [menuError, setMenuError] = useState("");
+  const menu = useContextMenu([project, boxes[0], boxes.map(b => b.node ?? b.id).join(","), edges.join(","), !!onEdit], setMenuError);
+  const showProperties = (element: Element) => {
+    const details = element.querySelector("details");
+    if (details) details.open = true;
+    ((details ?? element).querySelector<HTMLElement>("input,select,textarea") ?? details?.querySelector<HTMLElement>("summary"))?.focus();
+  };
   if (file)
     return (
       <div className="inspector panel-scroll">
@@ -461,9 +469,15 @@ export function Inspector({
     const natures = direction === "Input" ? INPUT_NATURE : OUTPUT_NATURE;
     const ports = direction === "Input" ? box.inputs : box.outputs;
     const label = `Edit ${direction.toLowerCase()}: ${p.name}`;
+    const index = ports.findIndex(x => x.node === p.node);
+    const portActions = (element: Element): MenuAction[] => [
+      {label: "Port properties", run: () => showProperties(element), disabled: !editable(p), reason: "This port is read-only."},
+      ...[-1, 1].map(delta => ({label: delta < 0 ? "Move up" : "Move down", run: () => reorder(ports, p.node!, delta), disabled: !editable(p) || index + delta < 0 || index + delta >= ports.length, reason: !editable(p) ? "This port is read-only." : "Already at the end of the list."})),
+      {label: `Delete ${direction.toLowerCase()}`, run: () => remove(p.node!, `Remove ${direction.toLowerCase()}: ${p.name}`), disabled: !editable(p), reason: "This port is read-only."},
+    ];
     if (!editable(p))
       return (
-        <div className="port-row" key={`${direction}${p.id}`} title={p.tooltip}>
+        <div className="port-row" key={`${direction}${p.id}`} title={p.tooltip} tabIndex={0} {...menu.trigger(event => portActions(event.currentTarget))}>
           <span className="port-indicator" data-type={p.type} />
           <strong>{p.name}</strong>
           <small>
@@ -472,9 +486,8 @@ export function Inspector({
           </small>
         </div>
       );
-    const index = ports.findIndex((x) => x.node === p.node);
     return (
-      <div className="port-row" key={`${direction}${p.id}`} title={p.tooltip}>
+      <div className="port-row" key={`${direction}${p.id}`} title={p.tooltip} tabIndex={0} {...menu.trigger(event => portActions(event.currentTarget))}>
         <span className="port-edit">
           <span className="port-indicator" data-type={p.type} />
           <Field
@@ -578,6 +591,8 @@ export function Inspector({
   };
   return (
     <div className="inspector panel-scroll box-inspector">
+      {menu.element}
+      {menuError && <p role="alert" className="error">{menuError}</p>}
       <div className="inspector-heading">
         <SlidersHorizontal size={18} />
         <div className="inspector-title">
@@ -620,11 +635,15 @@ export function Inspector({
         </details>
       )}
       <details open>
-        <summary>
+        <summary {...menu.trigger(() => [{label: "Add parameter", run: () => addPort("Parameter", "parameter", {content_type: "3"}), disabled: !editBox, reason: "This box is read-only."}])}>
           Parameters <span>{box.params.length}</span>
         </summary>
         {box.params.map((p) => (
-          <div className="parameter" key={p.id}>
+          <div className="parameter" key={p.id} tabIndex={0} {...menu.trigger(event => { const row = event.currentTarget; return [
+            {label: "Parameter properties", run: () => showProperties(row), disabled: !editable(p), reason: "This parameter is read-only."},
+            ...[-1, 1].map(delta => ({label: delta < 0 ? "Move up" : "Move down", run: () => reorder(box.params, p.node!, delta), disabled: !editable(p) || box.params.indexOf(p) + delta < 0 || box.params.indexOf(p) + delta >= box.params.length, reason: !editable(p) ? "This parameter is read-only." : "Already at the end of the list."})),
+            {label: "Delete parameter", run: () => remove(p.node!, `Remove parameter: ${p.name}`), disabled: !editable(p), reason: "This parameter is read-only."},
+          ]; })}>
             <div className="parameter-head">
               <strong>{p.name}</strong>
               <span className="type-chip">{CONTENT_TYPE[p.contentType] ?? "Unknown"}</span>
@@ -716,7 +735,11 @@ export function Inspector({
         )}
       </details>
       <details open>
-        <summary>
+        <summary {...menu.trigger(() => [
+          {label: "Add input", run: () => addPort("Input", "input", {nature: "1"}), disabled: !editBox, reason: "This box is read-only."},
+          {label: "Add event", run: () => addPort("Input", "event", {nature: "4", type: "0", inner: "1"}), disabled: !editBox, reason: "This box is read-only."},
+          {label: "Add output", run: () => addPort("Output", "output", {nature: "2"}), disabled: !editBox, reason: "This box is read-only."},
+        ])}>
           Ports <span>{box.inputs.length + box.outputs.length}</span>
         </summary>
         {box.inputs.length > 0 && <div className="inspector-group">Inputs</div>}
@@ -745,11 +768,20 @@ export function Inspector({
         )}
       </details>
       <details open={box.resources.length > 0}>
-        <summary>
+        <summary {...menu.trigger(event => {
+          const section = event.currentTarget.parentElement!;
+          return [{label: "Add resource…", run: () => { (section as HTMLDetailsElement).open = true; section.querySelector<HTMLElement>('[aria-label="Add resource"]')?.focus(); }, disabled: !editBox, reason: "This box is read-only."}];
+        })}>
           Resources <span>{box.resources.length}</span>
         </summary>
         {box.resources.map((r, i) => (
-          <div className="resource-row" key={i}>
+          <div className="resource-row" key={i} tabIndex={0} {...menu.trigger(event => {
+            const row = event.currentTarget;
+            return [
+              {label: "Edit requirement", run: () => showProperties(row), disabled: !editable(r), reason: "This requirement is read-only."},
+              {label: "Delete requirement", run: () => remove(r.node!, `Edit resource for box ${box.name}`), disabled: !editable(r), reason: "This requirement is read-only."},
+            ];
+          })}>
             <strong>{r.name}</strong>
             {editable(r) ? (
               <>

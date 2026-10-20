@@ -86,6 +86,51 @@ fn walk(dir: &Path, trail: &mut Vec<String>, source: &'static str, out: &mut Vec
     }
 }
 
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct TreeNode {
+    pub name: String,
+    pub relative_path: String,
+    pub kind: &'static str,
+    pub box_file: Option<String>,
+    pub has_script: bool,
+    pub children: Vec<TreeNode>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct TreeRoot {
+    pub path: String,
+    pub name: String,
+    pub source: &'static str,
+    pub writable: bool,
+    pub children: Vec<TreeNode>,
+}
+
+/// Keeps raw filesystem identities separate from decoded display names, including empty folders.
+pub fn tree(root: &Path, source: &'static str, writable: bool) -> Result<TreeRoot, String> {
+    let root = root.canonicalize().map_err(|e| e.to_string())?;
+    fn children(root: &Path, dir: &Path) -> Vec<TreeNode> {
+        ordered_children(dir).into_iter().map(|child| {
+            let file = BOX_FILES.iter().map(|f| child.join(f)).find(|f| f.is_file() && !f.is_symlink());
+            TreeNode {
+                name: decode_name(&child.file_name().unwrap().to_string_lossy()),
+                relative_path: child.strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/"),
+                kind: if file.is_some() { "box" } else { "folder" },
+                children: if file.is_some() { vec![] } else { children(root, &child) },
+                has_script: file.as_ref().and_then(|f| box_xml(f).ok()).is_some_and(|(doc, _)| !crate::view::box_view(&doc, crate::view::root_box(&doc)).script.is_empty()),
+                box_file: file.map(|f| crate::project::normalize(&f.to_string_lossy())),
+            }
+        }).collect()
+    }
+    Ok(TreeRoot {
+        name: if source == "choren" { "Choren".into() } else { decode_name(&root.file_name().unwrap_or_default().to_string_lossy()) },
+        path: crate::project::normalize(&root.to_string_lossy()),
+        source,
+        writable: writable && source == "user" && !is_install(&root) && !root.metadata().map_err(|e| e.to_string())?.permissions().readonly(),
+        children: children(&root, &root),
+    })
+}
+
 /// The library box's root `<Box>` element as XML, ready for `Command::AddBox`.
 pub fn box_xml(path: &Path) -> Result<(Doc, String), String> {
     let src = std::fs::read_to_string(path).map_err(|e| format!("Cannot read {}: {e}", path.display()))?;

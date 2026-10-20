@@ -185,15 +185,33 @@ async function backend(page: Page, format: "pml" | "crg" = "pml", timelineRoot =
             }
             if (command === "project_copy")
               return '<Box id="1" name="Greeter" />';
-            if (command === "library_index")
-              return structuredClone(libraryEntries);
+            if (command === "library_tree") {
+              if ((window as any).failLibraryGrant && args.userDirs?.length) throw new Error("This location has not been granted to the app.");
+              if ((window as any).libraryTrees && !(window as any).failLibraryGrant) return structuredClone((window as any).libraryTrees);
+              const roots = [{path: "/bundled", name: "Choren", source: "choren", writable: false, children: [] as any[]},
+                ...(args.userDirs ?? []).map((path: string) => ({path, name: path.split("/").at(-1), source: "user", writable: true, children: [] as any[]}))];
+              for (const entry of libraryEntries) {
+                const root = roots.find(r => r.source === entry.source && (r.source !== "user" || entry.path.startsWith(`${r.path}/`))) ?? roots[0];
+                let children = root.children;
+                const parts = entry.source === "user" ? entry.path.slice(root.path.length + 1).split("/").slice(0, -2) : entry.category.split("/").map(p => p.trim()).filter(p => p && p !== "Choren");
+                let relativePath = "";
+                for (const part of parts) {
+                  relativePath += `${relativePath ? "/" : ""}${part}`;
+                  let folder = children.find((c: any) => c.name === part);
+                  if (!folder) {folder = {name: part, relativePath, kind: "folder", boxFile: null, children: []}; children.push(folder);}
+                  children = folder.children;
+                }
+                children.push({name: entry.name, relativePath: `${relativePath ? relativePath + "/" : ""}${entry.name}`, kind: "box", boxFile: entry.path, hasScript: true, children: []});
+              }
+              return roots;
+            }
             if (command === "library_box")
               return box(90, 0, "Say", 0, { script: "say()" });
             if (command === "library_create" || command === "library_import_cbl" || command === "library_export_cbl") {
               if ((window as any).failLibraryArchive) throw new Error("folder not empty");
               return;
             }
-            if (command === "library_copy" || command === "library_manage") return;
+            if (command === "library_copy" || command === "library_manage") {if ((window as any).failLibraryManage) throw new Error("An item with that name already exists."); return;}
             if (command === "library_add_box") {
               if ((window as any).failLibrarySave)
                 throw new Error("Library is read only");
@@ -300,7 +318,7 @@ test("convert to box wraps the selected boxes", async ({ page }) => {
   await page.getByRole("textbox", { name: "Name of the new box" }).fill("Greeting");
   await page.getByRole("button", { name: "Group", exact: true }).click();
   await expect.poll(() => lastEdit(page)).toMatchObject({
-    label: "Convert selection to box",
+    label: "Group into box",
     commands: [{ type: "convertToBox", diagram: 10, name: "Greeting" }],
   });
   expect([...(await lastEdit(page)).commands[0].boxes].sort()).toEqual([20, 30]);
@@ -333,7 +351,7 @@ test("diagram toolbar copies, pastes and opens the box editor", async ({
 test("libraries group shared category paths into collapsible folders", async ({ page }) => {
   await backend(page);
   await page.getByRole("toolbar", { name: "Diagram editing" }).getByRole("button", { name: "Libraries", exact: true }).click();
-  const root = page.locator("details.library-category").filter({ has: page.locator(":scope > summary", { hasText: /^Choren$/ }) });
+  const root = page.locator("details.library-root").filter({ has: page.locator(":scope > summary", { hasText: /^Choren/ }) });
   await expect(root).toHaveCount(1);
   await expect(root.locator(":scope > details > summary")).toHaveText(["Speech", "Animation", "LEDs"]);
   const nod = page.getByRole("button", { name: "Nod", exact: true });
@@ -350,8 +368,7 @@ test("libraries group shared category paths into collapsible folders", async ({ 
   await expect(root.locator(":scope > details > summary")).toHaveText(["LEDs"]);
   await search.fill("");
   await expect(page.getByRole("button", { name: "Eyes Color", exact: true })).toBeHidden();
-  await page.locator("summary", { hasText: /^My boxes$/ }).click();
-  await expect(page.getByRole("button", { name: "Custom", exact: true })).toBeVisible();
+  await expect(root.locator(":scope > summary")).toContainText("Read-only");
 });
 
 test("bundled libraries work without an install; user libraries create, save and delete boxes", async ({
@@ -370,7 +387,7 @@ test("bundled libraries work without an install; user libraries create, save and
   await expect(
     page.getByRole("button", { name: "Delete from library" }),
   ).toHaveCount(0);
-  expect((await calls(page, "library_index"))[0]).toEqual({
+  expect((await calls(page, "library_tree"))[0]).toEqual({
     shareDir: null,
     userDirs: [],
   });
@@ -1188,7 +1205,7 @@ test("backend wiring: import and export CBL registers and refreshes the chosen l
   await modal.getByRole("button", { name: "Import library…" }).click();
   await expect.poll(() => calls(page, "library_import_cbl")).toEqual([{ path: "/p/Legacy.cbl", dir: "/p/out/Legacy" }]);
   await expect(page.getByLabel("User library")).toHaveValue("/p/out/Legacy");
-  await expect.poll(() => calls(page, "library_index")).toContainEqual(expect.objectContaining({ userDirs: ["/p/out/Legacy"] }));
+  await expect.poll(() => calls(page, "library_tree")).toContainEqual(expect.objectContaining({ userDirs: ["/p/out/Legacy"] }));
   await page.getByRole("button", { name: "Save as .cbl…", exact: true }).click();
   await expect.poll(() => calls(page, "library_export_cbl")).toEqual([{ library: "/p/out/Legacy", path: "/p/out.cbl" }]);
   await page.evaluate(() => (window as any).failLibraryArchive = true);
@@ -1222,4 +1239,96 @@ test("backend wiring: structured manifest edits preserve untouched properties an
   const saved = (await calls(page, "project_set_manifest"))[0].manifest;
   expect(saved.behaviors[0]).toEqual({ path: "behavior_1", nature: "solitary", userRequestable: true, names: [["en_US", "Greeting"]], descriptions: [], tags: [["en_US", "hello"]], triggerSentences: [["en_US", "Start greeting"]], loadingResponses: [], conditions: [["launchTrigger", "a < c"]], permissions: ["canStandUp"] });
   expect(saved.requirements).toEqual({ naoqi: [["2.8.1", ""]], robots: [{ model: "NAO", minHeadVersion: "6", maxHeadVersion: "", minBodyVersion: "6", maxBodyVersion: "6" }] });
+});
+
+test("library context targets retain raw paths and separate matching roots", async ({page}) => {
+  await backend(page);
+  await page.evaluate(() => {
+    (window as any).libraryTrees = ["/one/Same", "/two/Same"].map(path => ({path, name: "Same", source: "user", writable: true, children: [
+      {name: "Empty folder", relativePath: "Empty%20folder", kind: "folder", boxFile: null, children: []},
+      {name: "Script box", relativePath: "Script%20box", kind: "box", boxFile: `${path}/Script%20box/box.xar`, hasScript: true, children: []},
+    ]}));
+  });
+  await palette(page, "Show Libraries");
+  await page.locator(".library-actions").click({button: "right", position: {x: 4, y: 4}});
+  await page.getByRole("menuitem", {name: "Refresh", exact: true}).click();
+  const roots = page.locator(".library-root");
+  await expect(roots).toHaveCount(2);
+  const second = roots.nth(1);
+  await second.locator(":scope > summary").click({button: "right"});
+  const context = page.getByRole("menu", {name: "Context actions"});
+  await expect(context.getByRole("menuitem", {name: "Paste", exact: true})).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await second.getByText("Empty folder", {exact: true}).click({button: "right"});
+  await context.getByRole("menuitem", {name: "Rename…", exact: true}).click();
+  const rename = page.getByRole("dialog", {name: "Rename library item"});
+  await rename.getByLabel("Library item name").fill("Renamed");
+  await page.evaluate(() => (window as any).failLibraryManage = true);
+  await rename.getByRole("button", {name: "Rename", exact: true}).click();
+  await expect(rename.getByRole("alert")).toContainText("already exists");
+  await page.evaluate(() => (window as any).failLibraryManage = false);
+  await rename.getByRole("button", {name: "Rename", exact: true}).click();
+  await expect.poll(() => calls(page, "library_manage")).toContainEqual({library: "/two/Same", folder: "Empty%20folder", action: "rename", name: "Renamed"});
+  await second.getByText("Empty folder", {exact: true}).click({button: "right"});
+  page.once("dialog", d => d.dismiss());
+  await context.getByRole("menuitem", {name: "Delete folder…"}).click();
+  expect(await calls(page, "library_remove")).toEqual([]);
+  await roots.first().getByRole("button", {name: "Script box", exact: true}).click({button: "right"});
+  await expect(context.getByRole("menuitem", {name: "View script"})).toBeVisible();
+  await context.getByRole("menuitem", {name: "Copy", exact: true}).click();
+  await second.getByText("Empty folder", {exact: true}).click({button: "right"});
+  await context.getByRole("menuitem", {name: "Paste", exact: true}).click();
+  const paste = page.getByRole("dialog", {name: "Paste into library"});
+  await paste.getByLabel("Library item name").fill("Copy");
+  await paste.getByRole("button", {name: "Paste", exact: true}).click();
+  await expect.poll(() => calls(page, "library_copy")).toEqual([{source: "/one/Same/Script%20box", library: "/two/Same", folder: "Empty%20folder", name: "Copy"}]);
+  expect(await calls(page, "project_edit")).toEqual([]);
+});
+
+test("library menus isolate background and read-only items, clamp and restore keyboard focus", async ({page}) => {
+  await backend(page);
+  await palette(page, "Show Libraries");
+  await page.getByRole("textbox", {name: "Search libraries"}).fill("Say");
+  const box = page.getByRole("button", {name: "Say", exact: true});
+  await box.focus();
+  await page.keyboard.press("Shift+F10");
+  const context = page.getByRole("menu", {name: "Context actions"});
+  await expect(context.getByRole("menuitem", {name: "Delete…"})).toHaveCount(0);
+  await expect(context.getByRole("menuitem", {name: "Rename…"})).toHaveCount(0);
+  await page.keyboard.press("End");
+  await expect(context.getByRole("menuitem", {name: "Copy", exact: true})).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(box).toBeFocused();
+  await page.getByRole("textbox", {name: "Search libraries"}).click({button: "right"});
+  await expect(context).toHaveCount(0);
+  await page.locator(".library-actions").click({button: "right", position: {x: 4, y: 4}});
+  await expect(context.getByRole("menuitem", {name: "New library…"})).toBeVisible();
+  await expect(context.getByRole("menuitem", {name: "Insert into diagram"})).toHaveCount(0);
+  await page.evaluate(() => document.documentElement.style.setProperty("--text-scale", "1.5"));
+  const bounds = await context.boundingBox();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(900);
+  await page.keyboard.press("Escape");
+  await box.click({button: "right"});
+  await page.setViewportSize({width: 1100, height: 780});
+  await expect(context).toHaveCount(0);
+});
+
+test("expired library grants leave bundled content available and reject write targets", async ({page}) => {
+  await backend(page);
+  await palette(page, "Show Libraries");
+  await page.getByRole("button", {name: "New library…", exact: true}).click();
+  await page.getByRole("textbox", {name: "Library name"}).fill("Temporary");
+  await page.getByRole("button", {name: "Choose location…"}).click();
+  await expect(page.getByLabel("User library")).toHaveValue("/p/out/Temporary");
+  await page.evaluate(() => (window as any).failLibraryGrant = true);
+  await page.locator(".library-actions").click({button: "right", position: {x: 4, y: 4}});
+  await page.getByRole("menuitem", {name: "Refresh", exact: true}).click();
+  await expect(page.locator(".panel-message.error[role=alert]")).toContainText("Reopen the folder to grant access");
+  await expect(page.locator(".library-root")).toHaveCount(1);
+  await page.getByRole("textbox", {name: "Search libraries"}).fill("Say");
+  await expect(page.getByRole("button", {name: "Say", exact: true})).toBeVisible();
+  await page.locator(".library-root > summary").click({button: "right"});
+  await expect(page.getByRole("menuitem", {name: "Paste", exact: true})).toHaveCount(0);
+  await expect(page.getByRole("menuitem", {name: "New folder…", exact: true})).toHaveCount(0);
 });

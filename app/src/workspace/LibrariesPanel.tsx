@@ -12,75 +12,43 @@ import {
   Trash2,
   Workflow,
 } from "lucide-react";
-import type { Box } from "../format/types";
+import type { Box, ProjectDocument } from "../format/types";
 import { useShareDir } from "../icons";
 import { CategoryBadge } from "../diagram/appearance";
 import {
   LIBRARY_BOX_MIME,
-  indexLibrary,
+  libraryTree,
+  type LibraryRoot,
+  type LibraryTreeNode,
   native,
   readLibraryBox,
   type LibraryEntry,
 } from "../platform";
 import { useWorkspace } from "./context";
+import { useContextMenu, type MenuAction } from "./ContextMenu";
+import { resolveAddress } from "./model";
 import { Modal } from "./Modal";
 import { readPreference, savePreference } from "./storage";
 
-interface LibraryFolder {
-  folders: Map<string, LibraryFolder>;
-  entries: LibraryEntry[];
-}
-
-function LibraryTree({
-  folder,
-  searching,
-  selected,
-  onSelect,
-  draggable,
-}: {
-  draggable: boolean;
-  folder: LibraryFolder;
-  searching: boolean;
-  selected?: string;
+function LibraryTree({root, nodes, query, selected, onSelect, draggable, menu, actions}: {
+  root: LibraryRoot; nodes: LibraryTreeNode[]; query: string; selected?: string; draggable: boolean;
   onSelect: (entry: LibraryEntry) => void;
+  menu: ReturnType<typeof useContextMenu>;
+  actions: (root: LibraryRoot, node: LibraryTreeNode | undefined, element: Element) => MenuAction[];
 }) {
-  return (
-    <>
-      {[...folder.folders].map(([name, child]) => (
-        <details
-          className="library-category"
-          key={name}
-          open={searching || name === "Choren"}
-        >
-          <summary>{name}</summary>
-          <LibraryTree
-            draggable={draggable}
-            folder={child}
-            searching={searching}
-            selected={selected}
-            onSelect={onSelect}
-          />
-        </details>
-      ))}
-      {folder.entries.map((entry) => (
-        <button
-          className="tree-row"
-          key={entry.path}
-          title={entry.path}
-          aria-pressed={selected === entry.path}
-          draggable={draggable}
-          onDragStart={(event) => {
-            event.dataTransfer.setData(LIBRARY_BOX_MIME, entry.path);
-            event.dataTransfer.effectAllowed = "copy";
-          }}
-          onClick={() => onSelect(entry)}
-        >
-          <Workflow size={14} />
-          <span>{entry.name}</span>
-        </button>
-      ))}
-    </>
-  );
+  const matches = (node: LibraryTreeNode): boolean => `${node.relativePath} ${node.name}`.toLowerCase().includes(query.toLowerCase()) || node.children.some(matches);
+  return <>{nodes.filter(matches).map(node => node.kind === "folder" ?
+    <details className="library-category" key={node.relativePath} open={!!query || undefined}>
+      <summary {...menu.trigger(event => actions(root, node, event.currentTarget.parentElement!))}>{node.name}</summary>
+      <LibraryTree {...{root, query, selected, onSelect, draggable, menu, actions}} nodes={node.children}/>
+    </details> : <button className="tree-row" key={node.relativePath} title={node.boxFile!} aria-pressed={selected === node.boxFile}
+      draggable={draggable} onDragStart={event => {event.dataTransfer.setData(LIBRARY_BOX_MIME, node.boxFile!); event.dataTransfer.effectAllowed = "copy";}}
+      onClick={() => onSelect(libraryEntry(root, node))} {...menu.trigger(event => actions(root, node, event.currentTarget))}>
+      <Workflow size={14}/><span>{node.name}</span>
+    </button>)}</>;
+}
+function libraryEntry(root: LibraryRoot, node: LibraryTreeNode): LibraryEntry {
+  return {name: node.name, path: node.boxFile!, category: node.relativePath.split("/").slice(0, -1).join(" / "), source: root.source, root: root.path, relativePath: node.relativePath};
 }
 
 export function LibrariesPanel() {
@@ -95,8 +63,9 @@ export function LibrariesPanel() {
   });
   const [library, setLibrary] = useState(roots[0] ?? "");
   const [query, setQuery] = useState("");
-  const [entries, setEntries] = useState<LibraryEntry[]>([]);
+  const [trees, setTrees] = useState<LibraryRoot[]>([]);
   const [refresh, setRefresh] = useState(0);
+  const [folderAction, setFolderAction] = useState<{root: string; path: string; action: "create" | "rename" | "paste"; name: string}>();
   const [manage, setManage] = useState(false);
   const [folderPath, setFolderPath] = useState("");
   const [folderName, setFolderName] = useState("");
@@ -116,6 +85,8 @@ export function LibrariesPanel() {
     node?: number;
     behavior?: string;
     session?: number;
+    library?: string;
+    document?: ProjectDocument;
   }>();
   useEffect(() => savePreference("choren.user-libraries", roots), [roots]);
 
@@ -124,16 +95,20 @@ export function LibrariesPanel() {
     let live = true;
     setLoading(true);
     setError("");
-    void indexLibrary(directory, roots)
+    void libraryTree(directory, roots)
       .then(
         (result) => {
-          if (live) setEntries(result);
+          if (live) {
+            setTrees(result);
+            const canonical = result.filter(root => root.source === "user").map(root => root.path);
+            if (JSON.stringify(canonical) !== JSON.stringify(roots)) setRoots(canonical);
+          }
         },
         async (e) => {
           // An expired install grant must not hide the bundled boxes.
-          const bundled = await indexLibrary().catch(() => []);
+          const bundled = await libraryTree().catch(() => []);
           if (live) {
-            setEntries(bundled);
+            setTrees(bundled);
             setError(`${String(e)} Reopen the folder to grant access.`);
           }
         },
@@ -198,29 +173,83 @@ export function LibrariesPanel() {
     ws.inspectorEditable && ws.inspectedBoxes.length === 1
       ? ws.inspectedBoxes[0]
       : undefined;
-  const filtered = entries.filter((entry) =>
-    `${entry.category}/${entry.name}`
-      .toLowerCase()
-      .includes(query.toLowerCase()),
-  );
-  const tree: LibraryFolder = { folders: new Map(), entries: [] };
-  for (const entry of filtered) {
-    const path = entry.category
-      .split("/")
-      .map((part) => part.trim())
-      .filter(Boolean);
-    let folder = tree;
-    for (const name of path.length ? path : ["My boxes"]) {
-      if (!folder.folders.has(name))
-        folder.folders.set(name, { folders: new Map(), entries: [] });
-      folder = folder.folders.get(name)!;
+  const previewRoot = trees.find(root => root.path === preview?.entry.root && root.writable)?.path;
+  const menu = useContextMenu([trees, roots, busy, refresh, query, ws.state.project, ws.state.activeBehavior], setError);
+  const activeAddress = ws.state.addresses[ws.state.activeBehavior ?? ""];
+  const canInsert = ws.editable && !!(activeAddress && ws.state.project && resolveAddress(ws.state.project, activeAddress)?.diagram);
+  const importArchive = () => void run(async () => {
+    const path = await open({filters: [{name: "Box library", extensions: ["cbl"]}]});
+    if (path) setForm({kind: "import", archive: path, name: path.replace(/\\/g, "/").split("/").at(-1)!.replace(/\.cbl$/i, ""), folder: ""});
+  });
+  const exportLibrary = (root: string) => run(async () => {
+    const path = await save({defaultPath: `${root.split("/").at(-1)}.cbl`, filters: [{name: "Box library", extensions: ["cbl"]}]});
+    if (path) await invoke("library_export_cbl", {library: root, path});
+  });
+  const closeLibrary = (root: string) => {
+    const remaining = roots.filter(r => r !== root);
+    setRoots(remaining); if (library === root) setLibrary(remaining[0] ?? "");
+    if (requested?.root === root) setRequested(undefined);
+  };
+  const saveSelected = (root: string, folder = "") => {
+    if (!saveBox) return;
+    setForm({kind: "save", document: ws.state.project, library: root, name: saveBox.name, folder, node: saveBox.node, behavior: ws.state.activeBehavior, session: ws.state.project?.session});
+  };
+  const removeEntry = (root: string, path: string, name: string) => {
+    if (!confirm(`Delete “${name}” and its contents from the user library? This writes directly to disk and cannot be undone.`)) return;
+    return run(async () => {
+      await invoke("library_remove", {library: root, path}); setRequested(undefined); setRefresh(n => n + 1);
+    });
+  };
+  const loadEntry = (entry: LibraryEntry, action: "script" | "edit") => run(async () => {
+    const box = await readLibraryBox(entry.path);
+    if (action === "script") ws.openScript(box, undefined, entry.path);
+    else {setRequested(entry); setPreview({box: {...box, name: entry.name}, entry}); setEditing(true); setScript(false); setScriptDraft(undefined);}
+  });
+  const backgroundActions = (element: Element): MenuAction[] => [
+    {label: "Open library…", run: choose, disabled: busy},
+    {label: "New library…", run: () => setForm({kind: "create", name: "My boxes", folder: ""}), disabled: busy},
+    {label: "Import library archive…", run: importArchive, disabled: busy},
+    {label: "Refresh", run: () => setRefresh(n => n + 1), disabled: busy},
+    {label: "Expand all", run: () => element.querySelectorAll("details").forEach(d => d.open = true)},
+    {label: "Collapse all", run: () => element.querySelectorAll("details").forEach(d => d.open = false)},
+  ];
+  const actions = (root: LibraryRoot, node: LibraryTreeNode | undefined, element: Element): MenuAction[] => {
+    const path = node?.relativePath ?? "";
+    const expansion: MenuAction[] = [
+      {label: "Expand subtree", run: () => {element.querySelectorAll("details").forEach(d => d.open = true); if (element instanceof HTMLDetailsElement) element.open = true;}},
+      {label: "Collapse subtree", run: () => {element.querySelectorAll("details").forEach(d => d.open = false); if (element instanceof HTMLDetailsElement) element.open = false;}},
+    ];
+    const editFolder = (action: "create" | "rename" | "paste") => setFolderAction({root: root.path, path, action, name: action === "rename" ? path.split("/").at(-1)! : action === "paste" ? `${clipboard.split("/").at(-1) ?? "Box"} copy` : "New folder"});
+    if (node?.kind === "box") {
+      const entry = libraryEntry(root, node);
+      return [
+        {label: "Preview", run: () => setRequested(entry)},
+        ...(node.hasScript ? [{label: "View script", run: () => loadEntry(entry, "script")}] : []),
+        {label: "Insert into diagram", run: () => ws.insertLibraryBox(entry.path), disabled: !canInsert, reason: "Open an editable diagram first."},
+        {label: "Copy", run: () => setClipboard(`${root.path}/${path}`)},
+        ...(root.writable ? [
+          {label: "Edit…", run: () => loadEntry(entry, "edit"), disabled: busy},
+          {label: "Rename…", run: () => editFolder("rename"), disabled: busy},
+          {label: "Delete…", run: () => removeEntry(root.path, path, node.name), disabled: busy},
+        ] : []),
+      ];
     }
-    folder.entries.push(entry);
-  }
-  const previewRoot =
-    preview?.entry.source === "user"
-      ? roots.find((root) => preview.entry.path.startsWith(`${root}/`))
-      : undefined;
+    return [
+      ...(root.writable ? [
+        {label: "New folder…", run: () => editFolder("create"), disabled: busy},
+        ...(node ? [{label: "Rename…", run: () => editFolder("rename"), disabled: busy}, {label: "Copy", run: () => setClipboard(`${root.path}/${path}`)}] : []),
+        {label: "Paste", run: () => editFolder("paste"), disabled: busy || !clipboard, reason: busy ? "Wait for the current operation." : "Copy a library box or folder first."},
+        ...(node ? [{label: "Sort by name", run: () => run(async () => {await invoke("library_manage", {library: root.path, folder: path, action: "sort", name: ""}); setRefresh(n => n + 1);}), disabled: busy}] : [
+          {label: "Save selected diagram box…", run: () => saveSelected(root.path), disabled: busy || !saveBox || saveBox.node === undefined, reason: "Select one editable diagram box."},
+          {label: "Export library…", run: () => exportLibrary(root.path), disabled: busy},
+        ]),
+      ] : []),
+      ...expansion,
+      ...(!root.writable ? [{label: "Refresh", run: () => setRefresh(n => n + 1), disabled: busy}] : []),
+      ...(root.source === "user" && !node ? [{label: "Close library", run: () => closeLibrary(root.path), disabled: busy}] : []),
+      ...(root.writable && node ? [{label: "Delete folder…", run: () => removeEntry(root.path, path, node.name), disabled: busy}] : []),
+    ];
+  };
 
   if (!native)
     return (
@@ -229,7 +258,7 @@ export function LibrariesPanel() {
       </p>
     );
   return (
-    <div className="panel-column">
+    <div className="panel-column" tabIndex={0} {...menu.trigger(event => backgroundActions(event.currentTarget))}>{menu.element}
       <div
         className="panel-toolbar library-actions"
         role="toolbar"
@@ -249,10 +278,7 @@ export function LibrariesPanel() {
           <Plus size={13} />
           New library…
         </button>
-        <button disabled={busy} onClick={() => void run(async () => {
-          const path = await open({ filters: [{ name: "Box library", extensions: ["cbl"] }] });
-          if (path) setForm({ kind: "import", archive: path, name: path.replace(/\\/g, "/").split("/").at(-1)!.replace(/\.cbl$/i, ""), folder: "" });
-        })}>Import .cbl…</button>
+        <button disabled={busy} onClick={importArchive}>Import .cbl…</button>
       </div>
       <label className="search-field">
         <Search size={14} />
@@ -281,58 +307,30 @@ export function LibrariesPanel() {
               </select>
             </label>
             <button disabled={busy} onClick={() => {setError(""); setManage(true);}}>Manage folders…</button>
-            <button disabled={busy || !library} onClick={() => void run(async () => {
-              const path = await save({ defaultPath: `${library.split("/").at(-1)}.cbl`, filters: [{ name: "Box library", extensions: ["cbl"] }] });
-              if (path) await invoke("library_export_cbl", { library, path });
-            })}>Save as .cbl…</button>
+            <button disabled={busy || !library} onClick={() => void exportLibrary(library)}>Save as .cbl…</button>
             <button
               disabled={busy || !saveBox || saveBox.node === undefined}
               title="Select one box in a diagram to save its applied definition"
-              onClick={() => {
-                setError("");
-                setForm({
-                  kind: "save",
-                  name: saveBox!.name,
-                  folder: "",
-                  node: saveBox!.node,
-                  behavior: ws.state.activeBehavior,
-                  session: ws.state.project?.session,
-                });
-              }}
+              onClick={() => saveSelected(library)}
             >
               Save selected box…
             </button>
             <button
               disabled={busy}
               title="Remove this library from the workspace; files stay on disk"
-              onClick={() => {
-                const remaining = roots.filter((r) => r !== library);
-                setRoots(remaining);
-                setLibrary(remaining[0] ?? "");
-                setRequested(undefined);
-              }}
+              onClick={() => closeLibrary(library)}
             >
               Close library
             </button>
           </div>
         )}
         {loading && <p className="panel-message">Loading libraries…</p>}
-        <LibraryTree
-          key={query}
-          draggable={ws.editable}
-          folder={tree}
-          searching={!!query}
-          selected={requested?.path}
-          onSelect={(entry) => {
-            setError("");
-            setRequested(entry);
-          }}
-        />
-        {!filtered.length && !loading && (
-          <p className="panel-message">
-            {query ? "No matching boxes." : "This library has no boxes yet."}
-          </p>
-        )}
+        {trees.map(root => <details className="library-root" key={`${root.path}:${query}`} open>
+          <summary title={root.path} {...menu.trigger(event => actions(root, undefined, event.currentTarget.parentElement!))}>{root.name} <small>{root.source === "user" ? root.path : "Read-only"}</small></summary>
+          <LibraryTree {...{root, query, menu, actions}} nodes={root.children} draggable={canInsert} selected={requested?.path} onSelect={entry => {setError(""); setRequested(entry);}}/>
+          {!root.children.length && <p className="panel-message">Empty library</p>}
+        </details>)}
+        {!trees.length && !loading && <p className="panel-message">No libraries loaded.</p>}
         {error && !form && (
           <p className="panel-message error" role="alert">
             {error}
@@ -343,7 +341,7 @@ export function LibrariesPanel() {
             <strong>{preview.box.name}</strong>
             <CategoryBadge box={preview.box} />
             <p>{preview.box.tooltip || "No description."}</p>
-            {ws.editable ? (
+            {canInsert ? (
               <button onClick={() => ws.insertLibraryBox(preview.entry.path)}>
                 <Plus size={14} />
                 Insert into diagram
@@ -366,25 +364,7 @@ export function LibrariesPanel() {
             {previewRoot && (
               <button
                 disabled={busy}
-                onClick={() => {
-                  if (
-                    !confirm(
-                      `Delete “${preview.box.name}” from the user library? This cannot be undone.`,
-                    )
-                  )
-                    return;
-                  void run(async () => {
-                    const path = preview.entry.path
-                      .slice(previewRoot.length + 1)
-                      .replace(/\/(box|behavior)\.xar$/, "");
-                    await invoke("library_remove", {
-                      library: previewRoot,
-                      path,
-                    });
-                    setRequested(undefined);
-                    setRefresh((n) => n + 1);
-                  });
-                }}
+                onClick={() => void removeEntry(previewRoot, preview.entry.relativePath!, preview.box.name)}
               >
                 <Trash2 size={13} />
                 Delete from library
@@ -398,6 +378,19 @@ export function LibrariesPanel() {
           </button>
         </div>
       </div>
+      {folderAction && <Modal title={folderAction.action === "create" ? "New library folder" : folderAction.action === "rename" ? "Rename library item" : "Paste into library"} onClose={() => !busy && setFolderAction(undefined)}>
+        <form className="settings-content" onSubmit={event => {event.preventDefault(); void run(async () => {
+          if (folderAction.action === "paste") await invoke("library_copy", {source: clipboard, library: folderAction.root, folder: folderAction.path, name: folderAction.name.trim()});
+          else await invoke("library_manage", {library: folderAction.root, folder: folderAction.path, action: folderAction.action, name: folderAction.name.trim()});
+          setFolderAction(undefined); setRequested(undefined); setRefresh(n => n + 1);
+        });}}>
+          <p>{folderAction.root}/{folderAction.path}</p>
+          <label>Name<input autoFocus required aria-label="Library item name" value={folderAction.name} onChange={event => setFolderAction({...folderAction, name: event.target.value})}/></label>
+          <p>Changes are written directly to disk and do not use project undo.</p>
+          {error && <p role="alert" className="error">{error}</p>}
+          <button disabled={busy || !folderAction.name.trim()} type="submit">{folderAction.action === "paste" ? "Paste" : folderAction.action === "rename" ? "Rename" : "Create folder"}</button>
+        </form>
+      </Modal>}
       {manage && <Modal title="Manage library folders" onClose={() => !busy && setManage(false)}>
         <div className="settings-content"><p>{library}</p>
           <label>Folder path (empty = library root)<input aria-label="Library folder path" value={folderPath} onChange={e => setFolderPath(e.target.value)} /></label>
@@ -458,11 +451,12 @@ export function LibrariesPanel() {
                   else await invoke("library_create", { dir, title: form.name.trim() });
                   remember(dir);
                 } else {
+                  if (form.document !== ws.state.project) throw new Error("The project changed. Select the box again before saving it.");
                   await invoke("library_add_box", {
                     session: form.session,
                     behavior: form.behavior,
                     node: form.node,
-                    library,
+                    library: form.library ?? library,
                     folder: form.folder.trim(),
                     name: form.name.trim(),
                   });

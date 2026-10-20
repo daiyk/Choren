@@ -27,7 +27,7 @@ async function backend(
           invoke: async (command: string, args: any) => {
             calls.push({ command, args });
             if (command === "plugin:menu|new") return [++rid, String(rid)];
-            if (command === "library_index") return [];
+            if (command === "library_tree") return [];
             if (command === "robot_status") return null;
             if (
               command.startsWith("plugin:") ||

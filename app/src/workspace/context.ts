@@ -17,6 +17,7 @@ export interface ScriptDocument {
   box: Box;
   address?: GraphAddress;
 }
+export interface CommandTarget { behaviorId?: string; address?: GraphAddress; boxId?: number; destination?: string; }
 export interface WorkspaceContextValue {
   state: WorkspaceState;
   graphStyle: GraphStyle;
@@ -28,7 +29,7 @@ export interface WorkspaceContextValue {
   inspectedFile?: ProjectFile;
   loading: boolean;
   dock?: DockviewApi;
-  execute: (id: string) => void;
+  execute: (id: string, target?: CommandTarget) => void;
   showPanel: (id: string) => void;
   openExample: () => void;
   openBehavior: (id: string) => void;

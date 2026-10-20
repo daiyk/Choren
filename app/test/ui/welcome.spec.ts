@@ -21,7 +21,7 @@ async function desktop(page: Page) {
             if (args.path !== "/Applications/Choregraphe.app") throw "This folder is not a Choregraphe installation.";
             return share;
           }
-          if (command === "library_index") return [];
+          if (command === "library_tree") return [];
           if (command === "robot_status") return null;
         },
       },

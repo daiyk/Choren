@@ -37,10 +37,10 @@ export function ImportMenu() {
   </>;
 }
 
-export function ImportContent({ kind, onClose }: { kind: ImportKind; onClose: () => void }) {
+export function ImportContent({ kind, initialDestination = "", onClose }: { kind: ImportKind; initialDestination?: string; onClose: () => void }) {
   const ws = useWorkspace();
   const [paths, setPaths] = useState<string[]>([]);
-  const [destination, setDestination] = useState("");
+  const [destination, setDestination] = useState(initialDestination);
   const [conflicts, setConflicts] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -112,7 +112,7 @@ export function ImportContent({ kind, onClose }: { kind: ImportKind; onClose: ()
       </label>
       <p className="muted">
         {kind === "behavior"
-          ? "XAR imports the behavior definition; add any external resources with Import files or Import folder. CRG also includes its packaged resources. Like New behavior, behavior imports are removed using Remove behavior, not Undo."
+          ? "XAR imports the behavior definition; add any external resources with Import files or Import folder. CRG also includes its packaged resources. Behavior imports can be undone through project history."
           : kind === "folder" ? "Keeps the selected folder’s name and all files inside it, merging into a folder that already exists. Empty folders are omitted. You can undo this import."
           : "Copies the selected files into this project. You can undo this import."}
         {" "}If something with the same name exists, you are asked what to do. Changes are written on Save.

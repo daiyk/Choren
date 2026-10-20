@@ -14,6 +14,7 @@ import { native } from "../platform";
 import { RobotView } from "./RobotView";
 import { robot, useRobot, useRobotDescriptor } from "./store";
 import { useWorkspace } from "../workspace/context";
+import { useContextMenu } from "../workspace/ContextMenu";
 
 export function VirtualMovementSpeed() {
   const status = useRobot((s) => s.status);
@@ -69,6 +70,7 @@ export function RobotPanel() {
   const [heard, setHeard] = useState("");
   const [posture, setPosture] = useState("StandInit");
   const [sending, setSending] = useState(false);
+  const menu = useContextMenu([status, display, busy], e => robot.reportError(String(e)));
   const run = (p: Promise<unknown>) => {
     robot.clearError();
     void p.catch((e) => robot.reportError(String(e)));
@@ -112,7 +114,12 @@ export function RobotPanel() {
       </div>
     );
   return (
-    <div className="robot-panel">
+    <div className="robot-panel" tabIndex={0} {...menu.trigger(() => [
+      ...([['world', 'World grid'], ['position', 'Robot position'], ['motors', 'Motor updates']] as const).map(([key, label]) => ({label, checked: display[key], run: () => setDisplay({...display, [key]: !display[key]})})),
+      {label: "Joints & recording", run: () => ws.showPanel("recording")},
+      {label: "Poses", run: () => ws.showPanel("poses")},
+    ])}>
+      {menu.element}
       <div className="panel-toolbar">
         <span className="robot-connection-label" title={status.url}>
           {status.virtual ? "Virtual " : ""}
@@ -301,6 +308,8 @@ export function LogsPanel() {
   const [filter, setFilter] = useState("");
   const [level, setLevel] = useState("all");
   const shown = logs.filter(l => (level === "all" || l.level === level) && `${l.category} ${l.message}`.toLowerCase().includes(filter.toLowerCase()));
+  const ws = useWorkspace();
+  const menu = useContextMenu([logs, filter, level], e => ws.notify(String(e), "error"));
   if (!logs.length)
     return (
       <div className="panel-scroll">
@@ -312,7 +321,11 @@ export function LogsPanel() {
       </div>
     );
   return (
-    <div className="panel-column">
+    <div className="panel-column" tabIndex={0} {...menu.trigger(() => [
+      {label: "Copy displayed logs", run: () => navigator.clipboard.writeText(shown.map(l => `${new Date(l.time).toISOString()} ${l.level} ${l.category}: ${l.message}`).join("\n")), disabled: !shown.length, reason: "No logs match the filters."},
+      {label: "Clear logs", run: robot.clearLogs},
+    ])}>
+      {menu.element}
       <div className="panel-toolbar">
         <input aria-label="Filter robot logs" placeholder="Filter category or message" value={filter} onChange={e => setFilter(e.target.value)} />
         <select aria-label="Log severity" value={level} onChange={e => setLevel(e.target.value)}>
@@ -328,7 +341,7 @@ export function LogsPanel() {
       </div>
       <div className="robot-logs panel-scroll" role="log">
         {shown.map((l, i) => (
-          <div key={i} className="log-line" data-level={l.level}>
+          <div key={i} className="log-line" data-level={l.level} tabIndex={0} {...menu.trigger(() => [{label: "Copy message", run: () => navigator.clipboard.writeText(l.message)}])}>
             <time>{new Date(l.time).toLocaleTimeString()}</time>
             <span className="log-level">{logTag(l.level)}</span>
             <span className="log-category" title={l.category}>{l.category}</span>
