@@ -1,7 +1,9 @@
-# Builds signed, notarized macOS installers and attaches them to a draft GitHub release, with
-# signed update bundles and the latest.json that installed apps check (once published).
+# Builds macOS installers and attaches them to a draft GitHub release, with signed update bundles
+# and the latest.json that installed apps check (once published). With the Apple secrets the app is
+# Developer ID signed and notarized; without them it is ad-hoc signed, and users allow it once in
+# System Settings. Without the updater key, no update bundles are made.
 # Push a tag matching app/src-tauri/tauri.conf.json's version (v0.1.0), or run it by hand.
-# Setup: the signing and notarization secrets it reads are the secrets.* entries below.
+# Setup: the optional secrets it reads are the secrets.* entries below.
 name: Release
 
 on:
@@ -45,9 +47,10 @@ jobs:
       - run: npm ci
         working-directory: app
 
-      - uses: tauri-apps/tauri-action@v0
+      # Passes on only the secrets that are set, so a missing one never reaches Tauri as an empty value.
+      # No Developer ID means ad-hoc signing (`-`); no updater key means no update bundles.
+      - name: Signing setup
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -56,12 +59,30 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          for v in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD; do
+            if [ -n "${!v}" ]; then printf '%s<<__END__\n%s\n__END__\n' "$v" "${!v}" >> "$GITHUB_ENV"; fi
+          done
+          echo "APPLE_SIGNING_IDENTITY=${APPLE_SIGNING_IDENTITY:--}" >> "$GITHUB_ENV"
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then echo UPDATER=true >> "$GITHUB_ENV"; else
+            echo UPDATER=false >> "$GITHUB_ENV"
+            echo "UPDATER_ARGS=--config '{\"bundle\":{\"createUpdaterArtifacts\":false}}'" >> "$GITHUB_ENV"
+          fi
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: app
           tagName: v__VERSION__
           releaseName: Choren __VERSION__
-          releaseBody: Download the .dmg for your Mac (aarch64 = Apple silicon, x64 = Intel).
+          releaseBody: |
+            Download the .dmg for your Mac (aarch64 = Apple silicon, x64 = Intel).
+
+            If macOS says Choren "cannot be opened" or "is damaged", the build is not notarized:
+            open it once, then choose **Open Anyway** in System Settings → Privacy & Security, or run
+            `xattr -dr com.apple.quarantine /Applications/Choren.app`.
           releaseDraft: true
-          uploadUpdaterJson: true
+          uploadUpdaterJson: ${{ env.UPDATER }}
           # `app` produces the signed .app.tar.gz the updater installs.
-          args: --target ${{ matrix.target }} --bundles app,dmg
+          args: --target ${{ matrix.target }} --bundles app,dmg ${{ env.UPDATER_ARGS }}
