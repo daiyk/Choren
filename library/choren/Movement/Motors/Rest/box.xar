@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ChoregrapheBox xar_version="3">
+    <Box name="Rest" id="1" localization="8" tooltip="Goes to a resting posture and relaxes the motors." x="0" y="0">
+        <script language="4">
+            <content>
+                <![CDATA[class MyClass(GeneratedClass):
+    def __init__(self):
+        GeneratedClass.__init__(self)
+
+    def onInput_onStart(self):
+        self.session().service("ALMotion").rest()
+        self.onStopped()]]>
+</content>
+        </script>
+        <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" />
+        <Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="Starts the box." id="2" />
+        <Output name="onStopped" type="1" type_size="1" nature="1" inner="0" tooltip="Sent when the box has finished." id="3" />
+        <Resource name="All motors" type="Lock" timeout="0" />
+    </Box>
+</ChoregrapheBox>

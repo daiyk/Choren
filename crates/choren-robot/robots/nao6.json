@@ -1,0 +1,2346 @@
+{
+ "id": "nao6",
+ "name": "NAO 6",
+ "family": "Nao",
+ "version": "6.0.0",
+ "actuatorListModels": [
+  "",
+  "Nao",
+  "nao"
+ ],
+ "robotConfig": {
+  "RobotConfig/Body/Device/Foot/Version": "4",
+  "RobotConfig/Body/Device/Hand/Left/Version": "8",
+  "RobotConfig/Body/Device/Hand/Right/Version": "8",
+  "RobotConfig/Body/Device/LeftArm/Version": "8",
+  "RobotConfig/Body/Device/Legs/Version": "7",
+  "RobotConfig/Body/Device/RightArm/Version": "8",
+  "RobotConfig/Body/Device/Sonar/Version": "1",
+  "RobotConfig/Body/MreType": "2",
+  "RobotConfig/Body/SoftwareRequirement": "2.7.1",
+  "RobotConfig/Body/Type": "Nao",
+  "RobotConfig/Body/Version": "6.0.0",
+  "RobotConfig/Head/Device/Bluetooth/Version": "2",
+  "RobotConfig/Head/Device/Camera/Version": "10",
+  "RobotConfig/Head/Device/Ear/Version": "2",
+  "RobotConfig/Head/Device/FaceBoard/Leds/Rotation": "1",
+  "RobotConfig/Head/Device/FaceBoard/Version": "1",
+  "RobotConfig/Head/Device/Micro/Version": "4",
+  "RobotConfig/Head/Device/ThermalCooling/Version": "1",
+  "RobotConfig/Head/Device/TouchBoard/Version": "2",
+  "RobotConfig/Head/Type": "Nao",
+  "RobotConfig/Head/Version": "6.0.0"
+ },
+ "controlPeriodMs": 24,
+ "coupledLimits": [
+  {
+   "joint": "HeadPitch",
+   "by": "HeadYaw",
+   "points": [
+    [-2.086, -0.3, 0.33],
+    [-1.527, -0.23, 0.2],
+    [-0.7561, -0.33, 0.3578],
+    [-0.3665, -0.2, 0.32],
+    [-0.2094, -0.27, 0.32],
+    [0, -0.672, 0.515],
+    [0.2094, -0.27, 0.32],
+    [0.3665, -0.2, 0.32],
+    [0.7561, -0.33, 0.3578],
+    [1.527, -0.23, 0.2],
+    [2.086, -0.3, 0.33]
+   ]
+  },
+  {
+   "joint": "LAnkleRoll",
+   "by": "LAnklePitch",
+   "points": [
+    [-1.1895, -0.05, 0.075],
+    [-0.84, -0.18, 0.17],
+    [-0.7, -0.3979, 0.22],
+    [-0.45, -0.3979, 0.769],
+    [0.1, -0.3979, 0.769],
+    [0.35, -0.3979, 0.5505],
+    [0.9227, 0, 0.05]
+   ]
+  },
+  {
+   "joint": "RAnkleRoll",
+   "by": "RAnklePitch",
+   "points": [
+    [-1.1895, -0.075, 0.05],
+    [-0.84, -0.17, 0.18],
+    [-0.7, -0.22, 0.3979],
+    [-0.45, -0.769, 0.3979],
+    [0.1, -0.769, 0.3979],
+    [0.35, -0.5505, 0.3979],
+    [0.9227, -0.05, 0]
+   ]
+  }
+ ],
+ "bodyNames": [
+  "HeadYaw",
+  "HeadPitch",
+  "LShoulderPitch",
+  "LShoulderRoll",
+  "LElbowYaw",
+  "LElbowRoll",
+  "LWristYaw",
+  "LHand",
+  "LHipYawPitch",
+  "LHipRoll",
+  "LHipPitch",
+  "LKneePitch",
+  "LAnklePitch",
+  "LAnkleRoll",
+  "RHipYawPitch",
+  "RHipRoll",
+  "RHipPitch",
+  "RKneePitch",
+  "RAnklePitch",
+  "RAnkleRoll",
+  "RShoulderPitch",
+  "RShoulderRoll",
+  "RElbowYaw",
+  "RElbowRoll",
+  "RWristYaw",
+  "RHand"
+ ],
+ "joints": [
+  {
+   "name": "HeadYaw",
+   "parent": null,
+   "origin": [
+    0,
+    0,
+    0.1265
+   ],
+   "axis": [
+    0,
+    0,
+    1
+   ],
+   "min": -2.08566856,
+   "max": 2.08566856,
+   "maxVelocity": 8.2679739,
+   "chain": "Head",
+   "maxTorque": 1.54700005
+  },
+  {
+   "name": "HeadPitch",
+   "parent": "HeadYaw",
+   "origin": [
+    0,
+    0,
+    0
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "min": -0.671951771,
+   "max": 0.514872134,
+   "maxVelocity": 7.19407272,
+   "chain": "Head",
+   "maxTorque": 1.53199995
+  },
+  {
+   "name": "LShoulderPitch",
+   "parent": null,
+   "origin": [
+    0,
+    0.098,
+    0.1
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "min": -2.08566856,
+   "max": 2.08566856,
+   "maxVelocity": 8.2679739,
+   "chain": "LArm",
+   "maxTorque": 1.329
+  },
+  {
+   "name": "LShoulderRoll",
+   "parent": "LShoulderPitch",
+   "origin": [
+    0,
+    0,
+    0
+   ],
+   "axis": [
+    0,
+    0,
+    1
+   ],
+   "min": -0.314159274,
+   "max": 1.32645023,
+   "maxVelocity": 7.19407272,
+   "chain": "LArm",
+   "maxTorque": 1.78349996
+  },
+  {
+   "name": "LElbowYaw",
+   "parent": "LShoulderRoll",
+   "origin": [
+    0.105,
+    0.015,
+    0
+   ],
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "min": -2.08566856,
+   "max": 2.08566856,
+   "maxVelocity": 8.2679739,
+   "chain": "LArm",
+   "maxTorque": 1.54700005
+  },
+  {
+   "name": "LElbowRoll",
+   "parent": "LElbowYaw",
+   "origin": [
+    0,
+    0,
+    0
+   ],
+   "axis": [
+    0,
+    0,
+    1
+   ],
+   "min": -1.54461634,
+   "max": -0.0349065848,
+   "maxVelocity": 7.19407272,
+   "chain": "LArm",
+   "maxTorque": 1.53199995
+  },
+  {
+   "name": "LWristYaw",
+   "parent": "LElbowRoll",
+   "origin": [
+    0.05595,
+    0,
+    0
+   ],
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "min": -1.82386911,
+   "max": 1.82386911,
+   "maxVelocity": 24.6229305,
+   "chain": "LArm",
+   "maxTorque": 0.407499999
+  },
+  {
+   "name": "LHand",
+   "parent": "LWristYaw",
+   "origin": [
+    0.05775,
+    0,
+    -0.01231
+   ],
+   "axis": [
+    0,
+    0,
+    0
+   ],
+   "min": 0,
+   "max": 1,
+   "maxVelocity": 8.32999992,
+   "chain": "LArm",
+   "maxTorque": 0.291999996
+  },
+  {
+   "name": "LHipYawPitch",
+   "parent": null,
+   "origin": [
+    0,
+    0.05,
+    -0.085
+   ],
+   "axis": [
+    0,
+    0.7071067811865476,
+    -0.7071067811865476
+   ],
+   "min": -1.14528501,
+   "max": 0.740717709,
+   "maxVelocity": 4.16173744,
+   "chain": "LLeg",
+   "maxTorque": 3.34800005
+  },
+  {
+   "name": "LHipRoll",
+   "parent": "LHipYawPitch",
+   "origin": [
+    0,
+    0,
+    0
+   ],
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "min": -0.379434586,
+   "max": 0.790459633,
+   "maxVelocity": 4.16173744,
+   "chain": "LLeg",
+   "maxTorque": 3.34800005
+  },
+  {
+   "name": "LHipPitch",
+   "parent": "LHipRoll",
+   "origin": [
+    0,
+    0,
+    0
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "min": -1.53588974,
+   "max": 0.483979791,
+   "maxVelocity": 6.40239143,
+   "chain": "LLeg",
+   "maxTorque": 3.023
+  },
+  {
+   "name": "LKneePitch",
+   "parent": "LHipPitch",
+   "origin": [
+    0,
+    0,
+    -0.1
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "min": -0.0923279151,
+   "max": 2.11254644,
+   "maxVelocity": 6.40239143,
+   "chain": "LLeg",
+   "maxTorque": 3.023
+  },
+  {
+   "name": "LAnklePitch",
+   "parent": "LKneePitch",
+   "origin": [
+    0,
+    0,
+    -0.1029
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "min": -1.18944192,
+   "max": 0.922581017,
+   "maxVelocity": 6.40239143,
+   "chain": "LLeg",
+   "maxTorque": 3.023
+  },
+  {
+   "name": "LAnkleRoll",
+   "parent": "LAnklePitch",
+   "origin": [
+    0,
+    0,
+    0
+   ],
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "min": -0.39776054,
+   "max": 0.768992066,
+   "maxVelocity": 4.16173744,
+   "chain": "LLeg",
+   "maxTorque": 3.34800005
+  },
+  {
+   "name": "RHipYawPitch",
+   "parent": null,
+   "origin": [
+    0,
+    -0.05,
+    -0.085
+   ],
+   "axis": [
+    0,
+    0.7071067811865476,
+    0.7071067811865476
+   ],
+   "min": -1.14528501,
+   "max": 0.740717709,
+   "maxVelocity": 4.16173744,
+   "chain": "RLeg",
+   "coupledTo": "LHipYawPitch",
+   "maxTorque": 3.34800005
+  },
+  {
+   "name": "RHipRoll",
+   "parent": "RHipYawPitch",
+   "origin": [
+    0,
+    0,
+    0
+   ],
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "min": -0.790459633,
+   "max": 0.379434586,
+   "maxVelocity": 4.16173744,
+   "chain": "RLeg",
+   "maxTorque": 3.34800005
+  },
+  {
+   "name": "RHipPitch",
+   "parent": "RHipRoll",
+   "origin": [
+    0,
+    0,
+    0
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "min": -1.53588974,
+   "max": 0.483979791,
+   "maxVelocity": 6.40239143,
+   "chain": "RLeg",
+   "maxTorque": 3.02259994
+  },
+  {
+   "name": "RKneePitch",
+   "parent": "RHipPitch",
+   "origin": [
+    0,
+    0,
+    -0.1
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "min": -0.0923279151,
+   "max": 2.11254644,
+   "maxVelocity": 6.40239143,
+   "chain": "RLeg",
+   "maxTorque": 3.02259994
+  },
+  {
+   "name": "RAnklePitch",
+   "parent": "RKneePitch",
+   "origin": [
+    0,
+    0,
+    -0.1029
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "min": -1.18630028,
+   "max": 0.932005823,
+   "maxVelocity": 6.40239143,
+   "chain": "RLeg",
+   "maxTorque": 3.02259994
+  },
+  {
+   "name": "RAnkleRoll",
+   "parent": "RAnklePitch",
+   "origin": [
+    0,
+    0,
+    0
+   ],
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "min": -0.768992066,
+   "max": 0.39776054,
+   "maxVelocity": 4.16173744,
+   "chain": "RLeg",
+   "maxTorque": 3.34800005
+  },
+  {
+   "name": "RShoulderPitch",
+   "parent": null,
+   "origin": [
+    0,
+    -0.098,
+    0.1
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "min": -2.08566856,
+   "max": 2.08566856,
+   "maxVelocity": 8.2679739,
+   "chain": "RArm",
+   "maxTorque": 1.329
+  },
+  {
+   "name": "RShoulderRoll",
+   "parent": "RShoulderPitch",
+   "origin": [
+    0,
+    0,
+    0
+   ],
+   "axis": [
+    0,
+    0,
+    1
+   ],
+   "min": -1.32645023,
+   "max": 0.314159274,
+   "maxVelocity": 7.19407272,
+   "chain": "RArm",
+   "maxTorque": 1.78299999
+  },
+  {
+   "name": "RElbowYaw",
+   "parent": "RShoulderRoll",
+   "origin": [
+    0.105,
+    -0.015,
+    0
+   ],
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "min": -2.08566856,
+   "max": 2.08566856,
+   "maxVelocity": 8.2679739,
+   "chain": "RArm",
+   "maxTorque": 1.54700005
+  },
+  {
+   "name": "RElbowRoll",
+   "parent": "RElbowYaw",
+   "origin": [
+    0,
+    0,
+    0
+   ],
+   "axis": [
+    0,
+    0,
+    1
+   ],
+   "min": 0.0349065848,
+   "max": 1.54461634,
+   "maxVelocity": 7.19407272,
+   "chain": "RArm",
+   "maxTorque": 1.53199995
+  },
+  {
+   "name": "RWristYaw",
+   "parent": "RElbowRoll",
+   "origin": [
+    0.05595,
+    0,
+    0
+   ],
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "min": -1.82386911,
+   "max": 1.82386911,
+   "maxVelocity": 24.6229305,
+   "chain": "RArm",
+   "maxTorque": 0.407499999
+  },
+  {
+   "name": "RHand",
+   "parent": "RWristYaw",
+   "origin": [
+    0.05775,
+    0,
+    -0.01231
+   ],
+   "axis": [
+    0,
+    0,
+    0
+   ],
+   "min": 0,
+   "max": 1,
+   "maxVelocity": 8.32999992,
+   "chain": "RArm",
+   "maxTorque": 0.291999996
+  }
+ ],
+ "chains": {
+  "Head": [
+   "HeadYaw",
+   "HeadPitch"
+  ],
+  "LArm": [
+   "LShoulderPitch",
+   "LShoulderRoll",
+   "LElbowYaw",
+   "LElbowRoll",
+   "LWristYaw",
+   "LHand"
+  ],
+  "LLeg": [
+   "LHipYawPitch",
+   "LHipRoll",
+   "LHipPitch",
+   "LKneePitch",
+   "LAnklePitch",
+   "LAnkleRoll"
+  ],
+  "RLeg": [
+   "RHipYawPitch",
+   "RHipRoll",
+   "RHipPitch",
+   "RKneePitch",
+   "RAnklePitch",
+   "RAnkleRoll"
+  ],
+  "RArm": [
+   "RShoulderPitch",
+   "RShoulderRoll",
+   "RElbowYaw",
+   "RElbowRoll",
+   "RWristYaw",
+   "RHand"
+  ]
+ },
+ "mirror": {
+  "LShoulderPitch": "RShoulderPitch",
+  "LShoulderRoll": "RShoulderRoll",
+  "LElbowYaw": "RElbowYaw",
+  "LElbowRoll": "RElbowRoll",
+  "LWristYaw": "RWristYaw",
+  "LHand": "RHand",
+  "LHipYawPitch": "RHipYawPitch",
+  "LHipRoll": "RHipRoll",
+  "LHipPitch": "RHipPitch",
+  "LKneePitch": "RKneePitch",
+  "LAnklePitch": "RAnklePitch",
+  "LAnkleRoll": "RAnkleRoll",
+  "RHipYawPitch": "LHipYawPitch",
+  "RHipRoll": "LHipRoll",
+  "RHipPitch": "LHipPitch",
+  "RKneePitch": "LKneePitch",
+  "RAnklePitch": "LAnklePitch",
+  "RAnkleRoll": "LAnkleRoll",
+  "RShoulderPitch": "LShoulderPitch",
+  "RShoulderRoll": "LShoulderRoll",
+  "RElbowYaw": "LElbowYaw",
+  "RElbowRoll": "LElbowRoll",
+  "RWristYaw": "LWristYaw",
+  "RHand": "LHand"
+ },
+ "tips": {
+  "Head": [
+   "HeadPitch",
+   [
+    0.02,
+    0,
+    0.09
+   ]
+  ],
+  "LFoot": [
+   "LAnkleRoll",
+   [
+    0,
+    0,
+    -0.04519
+   ]
+  ],
+  "RFoot": [
+   "RAnkleRoll",
+   [
+    0,
+    0,
+    -0.04519
+   ]
+  ]
+ },
+ "postures": [
+  {
+   "name": "StandInit",
+   "family": "Standing",
+   "torsoPitch": 0.1039341167,
+   "angles": [
+    0.0,
+    0.0,
+    1.399999976,
+    0.3000000119,
+    -1.389999986,
+    -1.00999999,
+    0.0,
+    0.25,
+    0.0,
+    0.0,
+    -0.4499999881,
+    0.6999999881,
+    -0.349999994,
+    0.0,
+    0.0,
+    0.0,
+    -0.4499999881,
+    0.6999999881,
+    -0.349999994,
+    0.0,
+    1.399999976,
+    -0.3000000119,
+    1.389999986,
+    1.00999999,
+    0.0,
+    0.25
+   ]
+  },
+  {
+   "name": "Stand",
+   "family": "Standing",
+   "torsoPitch": 0.03892476484,
+   "angles": [
+    0.0,
+    -0.1700000316,
+    1.47165978,
+    0.1856547296,
+    -1.193808913,
+    -0.4106749296,
+    0.09999998659,
+    0.3000000119,
+    -0.1700096875,
+    0.1191084385,
+    0.1274189502,
+    -0.09232791513,
+    0.08741939813,
+    -0.1107931733,
+    -0.1700096875,
+    -0.1191024333,
+    0.1274191886,
+    -0.09232791513,
+    0.08741933107,
+    0.1107890233,
+    1.471660018,
+    -0.1856546849,
+    1.193808913,
+    0.4106748402,
+    0.09999998659,
+    0.3000000119
+   ]
+  },
+  {
+   "name": "StandZero",
+   "family": "Standing",
+   "torsoPitch": 0.03989011422,
+   "angles": [
+    0.0,
+    0.0,
+    0.0,
+    0.008726646192,
+    0.0,
+    -0.03490658477,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -0.008726646192,
+    0.0,
+    0.03490658477,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "name": "Crouch",
+   "family": "Crouching",
+   "torsoPitch": -0.05229252204,
+   "angles": [
+    0.0,
+    0.1000000015,
+    1.600000024,
+    0.1000000015,
+    -0.6999999881,
+    -1.0,
+    0.150000006,
+    0.0,
+    -0.25,
+    -0.07999999821,
+    -0.6999999881,
+    2.109999895,
+    -1.179999948,
+    0.07699999958,
+    -0.25,
+    0.07999999821,
+    -0.6999999881,
+    2.109999895,
+    -1.179999948,
+    -0.07699999958,
+    1.600000024,
+    -0.1000000015,
+    0.6999999881,
+    1.0,
+    -0.150000006,
+    0.0
+   ]
+  },
+  {
+   "name": "Sit",
+   "family": "Sitting",
+   "torsoPitch": -0.2883884013,
+   "angles": [
+    -0.03072190285,
+    -0.03992605209,
+    0.9034841061,
+    0.2223880291,
+    -0.4326300621,
+    -1.21795404,
+    0.03677415848,
+    0.2975999713,
+    -0.6166260242,
+    0.2776958942,
+    -1.535889745,
+    1.395898104,
+    0.8359880447,
+    -0.00762796402,
+    -0.6166260242,
+    -0.2684080601,
+    -1.535889745,
+    1.405186176,
+    0.8498780727,
+    0.01845002174,
+    0.9664621353,
+    -0.2623560429,
+    0.4908380508,
+    1.257922173,
+    -0.03072190285,
+    0.3015999794
+   ]
+  },
+  {
+   "name": "SitRelax",
+   "family": "Sitting",
+   "torsoPitch": -0.2369930148,
+   "angles": [
+    -0.0245859623,
+    0.0183660984,
+    2.085668564,
+    0.06438612938,
+    -2.080145836,
+    -0.2009119987,
+    -0.9499999881,
+    0.1383999586,
+    -0.521517992,
+    0.1319658756,
+    -1.115175962,
+    -0.04146003723,
+    0.9219999909,
+    0.0,
+    -0.521517992,
+    -0.220854044,
+    -1.060036182,
+    -0.09199810028,
+    0.9219999909,
+    0.0,
+    2.085668564,
+    -0.1488399506,
+    2.075459957,
+    0.04299402237,
+    0.9499999881,
+    0.1396000385
+   ]
+  },
+  {
+   "name": "LyingBack",
+   "family": "LyingBack",
+   "torsoPitch": -1.619500279,
+   "angles": [
+    -0.003109931946,
+    0.1533579826,
+    1.744116068,
+    0.1318819523,
+    -0.8023240566,
+    -1.544616342,
+    0.2469320297,
+    0.3032000065,
+    -0.5107800961,
+    0.1120240688,
+    0.3758718967,
+    -0.09232791513,
+    0.8636000156,
+    -0.03830814362,
+    -0.5107800961,
+    -0.08279395103,
+    -0.4004158974,
+    1.738063812,
+    0.6458559036,
+    -0.2822141647,
+    1.781015873,
+    -0.1687819958,
+    0.793035984,
+    1.544616342,
+    0.1794359684,
+    0.3607999682
+   ]
+  },
+  {
+   "name": "LyingBelly",
+   "family": "LyingBelly",
+   "torsoPitch": 1.377131343,
+   "angles": [
+    -0.6880000234,
+    -0.3072820306,
+    -1.193493843,
+    0.053647995,
+    -0.171849966,
+    -1.135118008,
+    -1.593867779,
+    0.01240003109,
+    -0.02143406868,
+    0.0798099041,
+    0.2991719246,
+    -0.09232791513,
+    0.7424139977,
+    -0.01222991943,
+    -0.02143406868,
+    -0.1656301022,
+    0.1242120266,
+    -0.09046411514,
+    0.9219999909,
+    0.0,
+    -0.6795201302,
+    -0.4034838676,
+    0.7009961605,
+    1.523303986,
+    1.62599802,
+    0.1715999842
+   ]
+  }
+ ],
+ "postureGraph": [
+  [
+   "StandInit",
+   "Stand"
+  ],
+  [
+   "StandInit",
+   "StandZero"
+  ],
+  [
+   "StandInit",
+   "Crouch"
+  ],
+  [
+   "Crouch",
+   "Sit"
+  ],
+  [
+   "Sit",
+   "SitRelax"
+  ],
+  [
+   "Sit",
+   "LyingBack"
+  ],
+  [
+   "LyingBack",
+   "LyingBelly"
+  ],
+  [
+   "LyingBelly",
+   "Crouch"
+  ]
+ ],
+ "leds": {
+  "groups": {
+   "AllLeds": [
+    "ChestBoard/Led/Blue/Actuator/Value",
+    "ChestBoard/Led/Green/Actuator/Value",
+    "ChestBoard/Led/Red/Actuator/Value",
+    "Ears/Led/Left/0Deg/Actuator/Value",
+    "Ears/Led/Left/108Deg/Actuator/Value",
+    "Ears/Led/Left/144Deg/Actuator/Value",
+    "Ears/Led/Left/180Deg/Actuator/Value",
+    "Ears/Led/Left/216Deg/Actuator/Value",
+    "Ears/Led/Left/252Deg/Actuator/Value",
+    "Ears/Led/Left/288Deg/Actuator/Value",
+    "Ears/Led/Left/324Deg/Actuator/Value",
+    "Ears/Led/Left/36Deg/Actuator/Value",
+    "Ears/Led/Left/72Deg/Actuator/Value",
+    "Ears/Led/Right/0Deg/Actuator/Value",
+    "Ears/Led/Right/108Deg/Actuator/Value",
+    "Ears/Led/Right/144Deg/Actuator/Value",
+    "Ears/Led/Right/180Deg/Actuator/Value",
+    "Ears/Led/Right/216Deg/Actuator/Value",
+    "Ears/Led/Right/252Deg/Actuator/Value",
+    "Ears/Led/Right/288Deg/Actuator/Value",
+    "Ears/Led/Right/324Deg/Actuator/Value",
+    "Ears/Led/Right/36Deg/Actuator/Value",
+    "Ears/Led/Right/72Deg/Actuator/Value",
+    "Face/Led/Blue/Left/0Deg/Actuator/Value",
+    "Face/Led/Blue/Left/135Deg/Actuator/Value",
+    "Face/Led/Blue/Left/180Deg/Actuator/Value",
+    "Face/Led/Blue/Left/225Deg/Actuator/Value",
+    "Face/Led/Blue/Left/270Deg/Actuator/Value",
+    "Face/Led/Blue/Left/315Deg/Actuator/Value",
+    "Face/Led/Blue/Left/45Deg/Actuator/Value",
+    "Face/Led/Blue/Left/90Deg/Actuator/Value",
+    "Face/Led/Blue/Right/0Deg/Actuator/Value",
+    "Face/Led/Blue/Right/135Deg/Actuator/Value",
+    "Face/Led/Blue/Right/180Deg/Actuator/Value",
+    "Face/Led/Blue/Right/225Deg/Actuator/Value",
+    "Face/Led/Blue/Right/270Deg/Actuator/Value",
+    "Face/Led/Blue/Right/315Deg/Actuator/Value",
+    "Face/Led/Blue/Right/45Deg/Actuator/Value",
+    "Face/Led/Blue/Right/90Deg/Actuator/Value",
+    "Face/Led/Green/Left/0Deg/Actuator/Value",
+    "Face/Led/Green/Left/135Deg/Actuator/Value",
+    "Face/Led/Green/Left/180Deg/Actuator/Value",
+    "Face/Led/Green/Left/225Deg/Actuator/Value",
+    "Face/Led/Green/Left/270Deg/Actuator/Value",
+    "Face/Led/Green/Left/315Deg/Actuator/Value",
+    "Face/Led/Green/Left/45Deg/Actuator/Value",
+    "Face/Led/Green/Left/90Deg/Actuator/Value",
+    "Face/Led/Green/Right/0Deg/Actuator/Value",
+    "Face/Led/Green/Right/135Deg/Actuator/Value",
+    "Face/Led/Green/Right/180Deg/Actuator/Value",
+    "Face/Led/Green/Right/225Deg/Actuator/Value",
+    "Face/Led/Green/Right/270Deg/Actuator/Value",
+    "Face/Led/Green/Right/315Deg/Actuator/Value",
+    "Face/Led/Green/Right/45Deg/Actuator/Value",
+    "Face/Led/Green/Right/90Deg/Actuator/Value",
+    "Face/Led/Red/Left/0Deg/Actuator/Value",
+    "Face/Led/Red/Left/135Deg/Actuator/Value",
+    "Face/Led/Red/Left/180Deg/Actuator/Value",
+    "Face/Led/Red/Left/225Deg/Actuator/Value",
+    "Face/Led/Red/Left/270Deg/Actuator/Value",
+    "Face/Led/Red/Left/315Deg/Actuator/Value",
+    "Face/Led/Red/Left/45Deg/Actuator/Value",
+    "Face/Led/Red/Left/90Deg/Actuator/Value",
+    "Face/Led/Red/Right/0Deg/Actuator/Value",
+    "Face/Led/Red/Right/135Deg/Actuator/Value",
+    "Face/Led/Red/Right/180Deg/Actuator/Value",
+    "Face/Led/Red/Right/225Deg/Actuator/Value",
+    "Face/Led/Red/Right/270Deg/Actuator/Value",
+    "Face/Led/Red/Right/315Deg/Actuator/Value",
+    "Face/Led/Red/Right/45Deg/Actuator/Value",
+    "Face/Led/Red/Right/90Deg/Actuator/Value",
+    "Head/Led/Front/Left/0/Actuator/Value",
+    "Head/Led/Front/Left/1/Actuator/Value",
+    "Head/Led/Front/Right/0/Actuator/Value",
+    "Head/Led/Front/Right/1/Actuator/Value",
+    "Head/Led/Middle/Left/0/Actuator/Value",
+    "Head/Led/Middle/Right/0/Actuator/Value",
+    "Head/Led/Rear/Left/0/Actuator/Value",
+    "Head/Led/Rear/Left/1/Actuator/Value",
+    "Head/Led/Rear/Left/2/Actuator/Value",
+    "Head/Led/Rear/Right/0/Actuator/Value",
+    "Head/Led/Rear/Right/1/Actuator/Value",
+    "Head/Led/Rear/Right/2/Actuator/Value",
+    "LFoot/Led/Blue/Actuator/Value",
+    "LFoot/Led/Green/Actuator/Value",
+    "LFoot/Led/Red/Actuator/Value",
+    "RFoot/Led/Blue/Actuator/Value",
+    "RFoot/Led/Green/Actuator/Value",
+    "RFoot/Led/Red/Actuator/Value"
+   ],
+   "AllLedsBlue": [
+    "ChestBoard/Led/Blue/Actuator/Value",
+    "Ears/Led/Left/0Deg/Actuator/Value",
+    "Ears/Led/Left/108Deg/Actuator/Value",
+    "Ears/Led/Left/144Deg/Actuator/Value",
+    "Ears/Led/Left/180Deg/Actuator/Value",
+    "Ears/Led/Left/216Deg/Actuator/Value",
+    "Ears/Led/Left/252Deg/Actuator/Value",
+    "Ears/Led/Left/288Deg/Actuator/Value",
+    "Ears/Led/Left/324Deg/Actuator/Value",
+    "Ears/Led/Left/36Deg/Actuator/Value",
+    "Ears/Led/Left/72Deg/Actuator/Value",
+    "Ears/Led/Right/0Deg/Actuator/Value",
+    "Ears/Led/Right/108Deg/Actuator/Value",
+    "Ears/Led/Right/144Deg/Actuator/Value",
+    "Ears/Led/Right/180Deg/Actuator/Value",
+    "Ears/Led/Right/216Deg/Actuator/Value",
+    "Ears/Led/Right/252Deg/Actuator/Value",
+    "Ears/Led/Right/288Deg/Actuator/Value",
+    "Ears/Led/Right/324Deg/Actuator/Value",
+    "Ears/Led/Right/36Deg/Actuator/Value",
+    "Ears/Led/Right/72Deg/Actuator/Value",
+    "Face/Led/Blue/Left/0Deg/Actuator/Value",
+    "Face/Led/Blue/Left/135Deg/Actuator/Value",
+    "Face/Led/Blue/Left/180Deg/Actuator/Value",
+    "Face/Led/Blue/Left/225Deg/Actuator/Value",
+    "Face/Led/Blue/Left/270Deg/Actuator/Value",
+    "Face/Led/Blue/Left/315Deg/Actuator/Value",
+    "Face/Led/Blue/Left/45Deg/Actuator/Value",
+    "Face/Led/Blue/Left/90Deg/Actuator/Value",
+    "Face/Led/Blue/Right/0Deg/Actuator/Value",
+    "Face/Led/Blue/Right/135Deg/Actuator/Value",
+    "Face/Led/Blue/Right/180Deg/Actuator/Value",
+    "Face/Led/Blue/Right/225Deg/Actuator/Value",
+    "Face/Led/Blue/Right/270Deg/Actuator/Value",
+    "Face/Led/Blue/Right/315Deg/Actuator/Value",
+    "Face/Led/Blue/Right/45Deg/Actuator/Value",
+    "Face/Led/Blue/Right/90Deg/Actuator/Value",
+    "Head/Led/Front/Left/0/Actuator/Value",
+    "Head/Led/Front/Left/1/Actuator/Value",
+    "Head/Led/Front/Right/0/Actuator/Value",
+    "Head/Led/Front/Right/1/Actuator/Value",
+    "Head/Led/Middle/Left/0/Actuator/Value",
+    "Head/Led/Middle/Right/0/Actuator/Value",
+    "Head/Led/Rear/Left/0/Actuator/Value",
+    "Head/Led/Rear/Left/1/Actuator/Value",
+    "Head/Led/Rear/Left/2/Actuator/Value",
+    "Head/Led/Rear/Right/0/Actuator/Value",
+    "Head/Led/Rear/Right/1/Actuator/Value",
+    "Head/Led/Rear/Right/2/Actuator/Value",
+    "LFoot/Led/Blue/Actuator/Value",
+    "RFoot/Led/Blue/Actuator/Value"
+   ],
+   "AllLedsGreen": [
+    "ChestBoard/Led/Green/Actuator/Value",
+    "Face/Led/Green/Left/0Deg/Actuator/Value",
+    "Face/Led/Green/Left/135Deg/Actuator/Value",
+    "Face/Led/Green/Left/180Deg/Actuator/Value",
+    "Face/Led/Green/Left/225Deg/Actuator/Value",
+    "Face/Led/Green/Left/270Deg/Actuator/Value",
+    "Face/Led/Green/Left/315Deg/Actuator/Value",
+    "Face/Led/Green/Left/45Deg/Actuator/Value",
+    "Face/Led/Green/Left/90Deg/Actuator/Value",
+    "Face/Led/Green/Right/0Deg/Actuator/Value",
+    "Face/Led/Green/Right/135Deg/Actuator/Value",
+    "Face/Led/Green/Right/180Deg/Actuator/Value",
+    "Face/Led/Green/Right/225Deg/Actuator/Value",
+    "Face/Led/Green/Right/270Deg/Actuator/Value",
+    "Face/Led/Green/Right/315Deg/Actuator/Value",
+    "Face/Led/Green/Right/45Deg/Actuator/Value",
+    "Face/Led/Green/Right/90Deg/Actuator/Value",
+    "LFoot/Led/Green/Actuator/Value",
+    "RFoot/Led/Green/Actuator/Value"
+   ],
+   "AllLedsRed": [
+    "ChestBoard/Led/Red/Actuator/Value",
+    "Face/Led/Red/Left/0Deg/Actuator/Value",
+    "Face/Led/Red/Left/135Deg/Actuator/Value",
+    "Face/Led/Red/Left/180Deg/Actuator/Value",
+    "Face/Led/Red/Left/225Deg/Actuator/Value",
+    "Face/Led/Red/Left/270Deg/Actuator/Value",
+    "Face/Led/Red/Left/315Deg/Actuator/Value",
+    "Face/Led/Red/Left/45Deg/Actuator/Value",
+    "Face/Led/Red/Left/90Deg/Actuator/Value",
+    "Face/Led/Red/Right/0Deg/Actuator/Value",
+    "Face/Led/Red/Right/135Deg/Actuator/Value",
+    "Face/Led/Red/Right/180Deg/Actuator/Value",
+    "Face/Led/Red/Right/225Deg/Actuator/Value",
+    "Face/Led/Red/Right/270Deg/Actuator/Value",
+    "Face/Led/Red/Right/315Deg/Actuator/Value",
+    "Face/Led/Red/Right/45Deg/Actuator/Value",
+    "Face/Led/Red/Right/90Deg/Actuator/Value",
+    "LFoot/Led/Red/Actuator/Value",
+    "RFoot/Led/Red/Actuator/Value"
+   ],
+   "BrainLeds": [
+    "Head/Led/Front/Left/0/Actuator/Value",
+    "Head/Led/Front/Left/1/Actuator/Value",
+    "Head/Led/Front/Right/0/Actuator/Value",
+    "Head/Led/Front/Right/1/Actuator/Value",
+    "Head/Led/Middle/Left/0/Actuator/Value",
+    "Head/Led/Middle/Right/0/Actuator/Value",
+    "Head/Led/Rear/Left/0/Actuator/Value",
+    "Head/Led/Rear/Left/1/Actuator/Value",
+    "Head/Led/Rear/Left/2/Actuator/Value",
+    "Head/Led/Rear/Right/0/Actuator/Value",
+    "Head/Led/Rear/Right/1/Actuator/Value",
+    "Head/Led/Rear/Right/2/Actuator/Value"
+   ],
+   "BrainLedsBack": [
+    "Head/Led/Rear/Left/0/Actuator/Value",
+    "Head/Led/Rear/Left/1/Actuator/Value",
+    "Head/Led/Rear/Left/2/Actuator/Value",
+    "Head/Led/Rear/Right/0/Actuator/Value",
+    "Head/Led/Rear/Right/1/Actuator/Value",
+    "Head/Led/Rear/Right/2/Actuator/Value"
+   ],
+   "BrainLedsFront": [
+    "Head/Led/Front/Left/0/Actuator/Value",
+    "Head/Led/Front/Left/1/Actuator/Value",
+    "Head/Led/Front/Right/0/Actuator/Value",
+    "Head/Led/Front/Right/1/Actuator/Value"
+   ],
+   "BrainLedsLeft": [
+    "Head/Led/Front/Left/0/Actuator/Value",
+    "Head/Led/Front/Left/1/Actuator/Value",
+    "Head/Led/Middle/Left/0/Actuator/Value",
+    "Head/Led/Rear/Left/0/Actuator/Value",
+    "Head/Led/Rear/Left/1/Actuator/Value",
+    "Head/Led/Rear/Left/2/Actuator/Value"
+   ],
+   "BrainLedsMiddle": [
+    "Head/Led/Middle/Left/0/Actuator/Value",
+    "Head/Led/Middle/Right/0/Actuator/Value"
+   ],
+   "BrainLedsRight": [
+    "Head/Led/Front/Right/0/Actuator/Value",
+    "Head/Led/Front/Right/1/Actuator/Value",
+    "Head/Led/Middle/Right/0/Actuator/Value",
+    "Head/Led/Rear/Right/0/Actuator/Value",
+    "Head/Led/Rear/Right/1/Actuator/Value",
+    "Head/Led/Rear/Right/2/Actuator/Value"
+   ],
+   "ChestLeds": [
+    "ChestBoard/Led/Blue/Actuator/Value",
+    "ChestBoard/Led/Green/Actuator/Value",
+    "ChestBoard/Led/Red/Actuator/Value"
+   ],
+   "EarLed1": [
+    "Ears/Led/Left/0Deg/Actuator/Value",
+    "Ears/Led/Right/0Deg/Actuator/Value"
+   ],
+   "EarLed10": [
+    "Ears/Led/Left/324Deg/Actuator/Value",
+    "Ears/Led/Right/324Deg/Actuator/Value"
+   ],
+   "EarLed2": [
+    "Ears/Led/Left/36Deg/Actuator/Value",
+    "Ears/Led/Right/36Deg/Actuator/Value"
+   ],
+   "EarLed3": [
+    "Ears/Led/Left/72Deg/Actuator/Value",
+    "Ears/Led/Right/72Deg/Actuator/Value"
+   ],
+   "EarLed4": [
+    "Ears/Led/Left/108Deg/Actuator/Value",
+    "Ears/Led/Right/108Deg/Actuator/Value"
+   ],
+   "EarLed5": [
+    "Ears/Led/Left/144Deg/Actuator/Value",
+    "Ears/Led/Right/144Deg/Actuator/Value"
+   ],
+   "EarLed6": [
+    "Ears/Led/Left/180Deg/Actuator/Value",
+    "Ears/Led/Right/180Deg/Actuator/Value"
+   ],
+   "EarLed7": [
+    "Ears/Led/Left/216Deg/Actuator/Value",
+    "Ears/Led/Right/216Deg/Actuator/Value"
+   ],
+   "EarLed8": [
+    "Ears/Led/Left/252Deg/Actuator/Value",
+    "Ears/Led/Right/252Deg/Actuator/Value"
+   ],
+   "EarLed9": [
+    "Ears/Led/Left/288Deg/Actuator/Value",
+    "Ears/Led/Right/288Deg/Actuator/Value"
+   ],
+   "EarLeds": [
+    "Ears/Led/Left/0Deg/Actuator/Value",
+    "Ears/Led/Left/108Deg/Actuator/Value",
+    "Ears/Led/Left/144Deg/Actuator/Value",
+    "Ears/Led/Left/180Deg/Actuator/Value",
+    "Ears/Led/Left/216Deg/Actuator/Value",
+    "Ears/Led/Left/252Deg/Actuator/Value",
+    "Ears/Led/Left/288Deg/Actuator/Value",
+    "Ears/Led/Left/324Deg/Actuator/Value",
+    "Ears/Led/Left/36Deg/Actuator/Value",
+    "Ears/Led/Left/72Deg/Actuator/Value",
+    "Ears/Led/Right/0Deg/Actuator/Value",
+    "Ears/Led/Right/108Deg/Actuator/Value",
+    "Ears/Led/Right/144Deg/Actuator/Value",
+    "Ears/Led/Right/180Deg/Actuator/Value",
+    "Ears/Led/Right/216Deg/Actuator/Value",
+    "Ears/Led/Right/252Deg/Actuator/Value",
+    "Ears/Led/Right/288Deg/Actuator/Value",
+    "Ears/Led/Right/324Deg/Actuator/Value",
+    "Ears/Led/Right/36Deg/Actuator/Value",
+    "Ears/Led/Right/72Deg/Actuator/Value"
+   ],
+   "FaceLed0": [
+    "Face/Led/Blue/Left/0Deg/Actuator/Value",
+    "Face/Led/Blue/Right/315Deg/Actuator/Value",
+    "Face/Led/Green/Left/0Deg/Actuator/Value",
+    "Face/Led/Green/Right/315Deg/Actuator/Value",
+    "Face/Led/Red/Left/0Deg/Actuator/Value",
+    "Face/Led/Red/Right/315Deg/Actuator/Value"
+   ],
+   "FaceLed1": [
+    "Face/Led/Blue/Left/45Deg/Actuator/Value",
+    "Face/Led/Blue/Right/270Deg/Actuator/Value",
+    "Face/Led/Green/Left/45Deg/Actuator/Value",
+    "Face/Led/Green/Right/270Deg/Actuator/Value",
+    "Face/Led/Red/Left/45Deg/Actuator/Value",
+    "Face/Led/Red/Right/270Deg/Actuator/Value"
+   ],
+   "FaceLed2": [
+    "Face/Led/Blue/Left/90Deg/Actuator/Value",
+    "Face/Led/Blue/Right/225Deg/Actuator/Value",
+    "Face/Led/Green/Left/90Deg/Actuator/Value",
+    "Face/Led/Green/Right/225Deg/Actuator/Value",
+    "Face/Led/Red/Left/90Deg/Actuator/Value",
+    "Face/Led/Red/Right/225Deg/Actuator/Value"
+   ],
+   "FaceLed3": [
+    "Face/Led/Blue/Left/135Deg/Actuator/Value",
+    "Face/Led/Blue/Right/180Deg/Actuator/Value",
+    "Face/Led/Green/Left/135Deg/Actuator/Value",
+    "Face/Led/Green/Right/180Deg/Actuator/Value",
+    "Face/Led/Red/Left/135Deg/Actuator/Value",
+    "Face/Led/Red/Right/180Deg/Actuator/Value"
+   ],
+   "FaceLed4": [
+    "Face/Led/Blue/Left/180Deg/Actuator/Value",
+    "Face/Led/Blue/Right/135Deg/Actuator/Value",
+    "Face/Led/Green/Left/180Deg/Actuator/Value",
+    "Face/Led/Green/Right/135Deg/Actuator/Value",
+    "Face/Led/Red/Left/180Deg/Actuator/Value",
+    "Face/Led/Red/Right/135Deg/Actuator/Value"
+   ],
+   "FaceLed5": [
+    "Face/Led/Blue/Left/225Deg/Actuator/Value",
+    "Face/Led/Blue/Right/90Deg/Actuator/Value",
+    "Face/Led/Green/Left/225Deg/Actuator/Value",
+    "Face/Led/Green/Right/90Deg/Actuator/Value",
+    "Face/Led/Red/Left/225Deg/Actuator/Value",
+    "Face/Led/Red/Right/90Deg/Actuator/Value"
+   ],
+   "FaceLed6": [
+    "Face/Led/Blue/Left/270Deg/Actuator/Value",
+    "Face/Led/Blue/Right/45Deg/Actuator/Value",
+    "Face/Led/Green/Left/270Deg/Actuator/Value",
+    "Face/Led/Green/Right/45Deg/Actuator/Value",
+    "Face/Led/Red/Left/270Deg/Actuator/Value",
+    "Face/Led/Red/Right/45Deg/Actuator/Value"
+   ],
+   "FaceLed7": [
+    "Face/Led/Blue/Left/315Deg/Actuator/Value",
+    "Face/Led/Blue/Right/0Deg/Actuator/Value",
+    "Face/Led/Green/Left/315Deg/Actuator/Value",
+    "Face/Led/Green/Right/0Deg/Actuator/Value",
+    "Face/Led/Red/Left/315Deg/Actuator/Value",
+    "Face/Led/Red/Right/0Deg/Actuator/Value"
+   ],
+   "FaceLedLeft0": [
+    "Face/Led/Blue/Left/0Deg/Actuator/Value",
+    "Face/Led/Green/Left/0Deg/Actuator/Value",
+    "Face/Led/Red/Left/0Deg/Actuator/Value"
+   ],
+   "FaceLedLeft1": [
+    "Face/Led/Blue/Left/45Deg/Actuator/Value",
+    "Face/Led/Green/Left/45Deg/Actuator/Value",
+    "Face/Led/Red/Left/45Deg/Actuator/Value"
+   ],
+   "FaceLedLeft2": [
+    "Face/Led/Blue/Left/90Deg/Actuator/Value",
+    "Face/Led/Green/Left/90Deg/Actuator/Value",
+    "Face/Led/Red/Left/90Deg/Actuator/Value"
+   ],
+   "FaceLedLeft3": [
+    "Face/Led/Blue/Left/135Deg/Actuator/Value",
+    "Face/Led/Green/Left/135Deg/Actuator/Value",
+    "Face/Led/Red/Left/135Deg/Actuator/Value"
+   ],
+   "FaceLedLeft4": [
+    "Face/Led/Blue/Left/180Deg/Actuator/Value",
+    "Face/Led/Green/Left/180Deg/Actuator/Value",
+    "Face/Led/Red/Left/180Deg/Actuator/Value"
+   ],
+   "FaceLedLeft5": [
+    "Face/Led/Blue/Left/225Deg/Actuator/Value",
+    "Face/Led/Green/Left/225Deg/Actuator/Value",
+    "Face/Led/Red/Left/225Deg/Actuator/Value"
+   ],
+   "FaceLedLeft6": [
+    "Face/Led/Blue/Left/270Deg/Actuator/Value",
+    "Face/Led/Green/Left/270Deg/Actuator/Value",
+    "Face/Led/Red/Left/270Deg/Actuator/Value"
+   ],
+   "FaceLedLeft7": [
+    "Face/Led/Blue/Left/315Deg/Actuator/Value",
+    "Face/Led/Green/Left/315Deg/Actuator/Value",
+    "Face/Led/Red/Left/315Deg/Actuator/Value"
+   ],
+   "FaceLedRight0": [
+    "Face/Led/Blue/Right/315Deg/Actuator/Value",
+    "Face/Led/Green/Right/315Deg/Actuator/Value",
+    "Face/Led/Red/Right/315Deg/Actuator/Value"
+   ],
+   "FaceLedRight1": [
+    "Face/Led/Blue/Right/270Deg/Actuator/Value",
+    "Face/Led/Green/Right/270Deg/Actuator/Value",
+    "Face/Led/Red/Right/270Deg/Actuator/Value"
+   ],
+   "FaceLedRight2": [
+    "Face/Led/Blue/Right/225Deg/Actuator/Value",
+    "Face/Led/Green/Right/225Deg/Actuator/Value",
+    "Face/Led/Red/Right/225Deg/Actuator/Value"
+   ],
+   "FaceLedRight3": [
+    "Face/Led/Blue/Right/180Deg/Actuator/Value",
+    "Face/Led/Green/Right/180Deg/Actuator/Value",
+    "Face/Led/Red/Right/180Deg/Actuator/Value"
+   ],
+   "FaceLedRight4": [
+    "Face/Led/Blue/Right/135Deg/Actuator/Value",
+    "Face/Led/Green/Right/135Deg/Actuator/Value",
+    "Face/Led/Red/Right/135Deg/Actuator/Value"
+   ],
+   "FaceLedRight5": [
+    "Face/Led/Blue/Right/90Deg/Actuator/Value",
+    "Face/Led/Green/Right/90Deg/Actuator/Value",
+    "Face/Led/Red/Right/90Deg/Actuator/Value"
+   ],
+   "FaceLedRight6": [
+    "Face/Led/Blue/Right/45Deg/Actuator/Value",
+    "Face/Led/Green/Right/45Deg/Actuator/Value",
+    "Face/Led/Red/Right/45Deg/Actuator/Value"
+   ],
+   "FaceLedRight7": [
+    "Face/Led/Blue/Right/0Deg/Actuator/Value",
+    "Face/Led/Green/Right/0Deg/Actuator/Value",
+    "Face/Led/Red/Right/0Deg/Actuator/Value"
+   ],
+   "FaceLeds": [
+    "Face/Led/Blue/Left/0Deg/Actuator/Value",
+    "Face/Led/Blue/Left/135Deg/Actuator/Value",
+    "Face/Led/Blue/Left/180Deg/Actuator/Value",
+    "Face/Led/Blue/Left/225Deg/Actuator/Value",
+    "Face/Led/Blue/Left/270Deg/Actuator/Value",
+    "Face/Led/Blue/Left/315Deg/Actuator/Value",
+    "Face/Led/Blue/Left/45Deg/Actuator/Value",
+    "Face/Led/Blue/Left/90Deg/Actuator/Value",
+    "Face/Led/Blue/Right/0Deg/Actuator/Value",
+    "Face/Led/Blue/Right/135Deg/Actuator/Value",
+    "Face/Led/Blue/Right/180Deg/Actuator/Value",
+    "Face/Led/Blue/Right/225Deg/Actuator/Value",
+    "Face/Led/Blue/Right/270Deg/Actuator/Value",
+    "Face/Led/Blue/Right/315Deg/Actuator/Value",
+    "Face/Led/Blue/Right/45Deg/Actuator/Value",
+    "Face/Led/Blue/Right/90Deg/Actuator/Value",
+    "Face/Led/Green/Left/0Deg/Actuator/Value",
+    "Face/Led/Green/Left/135Deg/Actuator/Value",
+    "Face/Led/Green/Left/180Deg/Actuator/Value",
+    "Face/Led/Green/Left/225Deg/Actuator/Value",
+    "Face/Led/Green/Left/270Deg/Actuator/Value",
+    "Face/Led/Green/Left/315Deg/Actuator/Value",
+    "Face/Led/Green/Left/45Deg/Actuator/Value",
+    "Face/Led/Green/Left/90Deg/Actuator/Value",
+    "Face/Led/Green/Right/0Deg/Actuator/Value",
+    "Face/Led/Green/Right/135Deg/Actuator/Value",
+    "Face/Led/Green/Right/180Deg/Actuator/Value",
+    "Face/Led/Green/Right/225Deg/Actuator/Value",
+    "Face/Led/Green/Right/270Deg/Actuator/Value",
+    "Face/Led/Green/Right/315Deg/Actuator/Value",
+    "Face/Led/Green/Right/45Deg/Actuator/Value",
+    "Face/Led/Green/Right/90Deg/Actuator/Value",
+    "Face/Led/Red/Left/0Deg/Actuator/Value",
+    "Face/Led/Red/Left/135Deg/Actuator/Value",
+    "Face/Led/Red/Left/180Deg/Actuator/Value",
+    "Face/Led/Red/Left/225Deg/Actuator/Value",
+    "Face/Led/Red/Left/270Deg/Actuator/Value",
+    "Face/Led/Red/Left/315Deg/Actuator/Value",
+    "Face/Led/Red/Left/45Deg/Actuator/Value",
+    "Face/Led/Red/Left/90Deg/Actuator/Value",
+    "Face/Led/Red/Right/0Deg/Actuator/Value",
+    "Face/Led/Red/Right/135Deg/Actuator/Value",
+    "Face/Led/Red/Right/180Deg/Actuator/Value",
+    "Face/Led/Red/Right/225Deg/Actuator/Value",
+    "Face/Led/Red/Right/270Deg/Actuator/Value",
+    "Face/Led/Red/Right/315Deg/Actuator/Value",
+    "Face/Led/Red/Right/45Deg/Actuator/Value",
+    "Face/Led/Red/Right/90Deg/Actuator/Value"
+   ],
+   "FaceLedsBottom": [
+    "Face/Led/Blue/Left/135Deg/Actuator/Value",
+    "Face/Led/Blue/Left/180Deg/Actuator/Value",
+    "Face/Led/Blue/Right/135Deg/Actuator/Value",
+    "Face/Led/Blue/Right/180Deg/Actuator/Value",
+    "Face/Led/Green/Left/135Deg/Actuator/Value",
+    "Face/Led/Green/Left/180Deg/Actuator/Value",
+    "Face/Led/Green/Right/135Deg/Actuator/Value",
+    "Face/Led/Green/Right/180Deg/Actuator/Value",
+    "Face/Led/Red/Left/135Deg/Actuator/Value",
+    "Face/Led/Red/Left/180Deg/Actuator/Value",
+    "Face/Led/Red/Right/135Deg/Actuator/Value",
+    "Face/Led/Red/Right/180Deg/Actuator/Value"
+   ],
+   "FaceLedsExternal": [
+    "Face/Led/Blue/Left/225Deg/Actuator/Value",
+    "Face/Led/Blue/Left/270Deg/Actuator/Value",
+    "Face/Led/Blue/Right/45Deg/Actuator/Value",
+    "Face/Led/Blue/Right/90Deg/Actuator/Value",
+    "Face/Led/Green/Left/225Deg/Actuator/Value",
+    "Face/Led/Green/Left/270Deg/Actuator/Value",
+    "Face/Led/Green/Right/45Deg/Actuator/Value",
+    "Face/Led/Green/Right/90Deg/Actuator/Value",
+    "Face/Led/Red/Left/225Deg/Actuator/Value",
+    "Face/Led/Red/Left/270Deg/Actuator/Value",
+    "Face/Led/Red/Right/45Deg/Actuator/Value",
+    "Face/Led/Red/Right/90Deg/Actuator/Value"
+   ],
+   "FaceLedsInternal": [
+    "Face/Led/Blue/Left/45Deg/Actuator/Value",
+    "Face/Led/Blue/Left/90Deg/Actuator/Value",
+    "Face/Led/Blue/Right/225Deg/Actuator/Value",
+    "Face/Led/Blue/Right/270Deg/Actuator/Value",
+    "Face/Led/Green/Left/45Deg/Actuator/Value",
+    "Face/Led/Green/Left/90Deg/Actuator/Value",
+    "Face/Led/Green/Right/225Deg/Actuator/Value",
+    "Face/Led/Green/Right/270Deg/Actuator/Value",
+    "Face/Led/Red/Left/45Deg/Actuator/Value",
+    "Face/Led/Red/Left/90Deg/Actuator/Value",
+    "Face/Led/Red/Right/225Deg/Actuator/Value",
+    "Face/Led/Red/Right/270Deg/Actuator/Value"
+   ],
+   "FaceLedsLeftBottom": [
+    "Face/Led/Blue/Left/135Deg/Actuator/Value",
+    "Face/Led/Blue/Left/180Deg/Actuator/Value",
+    "Face/Led/Green/Left/135Deg/Actuator/Value",
+    "Face/Led/Green/Left/180Deg/Actuator/Value",
+    "Face/Led/Red/Left/135Deg/Actuator/Value",
+    "Face/Led/Red/Left/180Deg/Actuator/Value"
+   ],
+   "FaceLedsLeftExternal": [
+    "Face/Led/Blue/Left/225Deg/Actuator/Value",
+    "Face/Led/Blue/Left/270Deg/Actuator/Value",
+    "Face/Led/Green/Left/225Deg/Actuator/Value",
+    "Face/Led/Green/Left/270Deg/Actuator/Value",
+    "Face/Led/Red/Left/225Deg/Actuator/Value",
+    "Face/Led/Red/Left/270Deg/Actuator/Value"
+   ],
+   "FaceLedsLeftInternal": [
+    "Face/Led/Blue/Left/45Deg/Actuator/Value",
+    "Face/Led/Blue/Left/90Deg/Actuator/Value",
+    "Face/Led/Green/Left/45Deg/Actuator/Value",
+    "Face/Led/Green/Left/90Deg/Actuator/Value",
+    "Face/Led/Red/Left/45Deg/Actuator/Value",
+    "Face/Led/Red/Left/90Deg/Actuator/Value"
+   ],
+   "FaceLedsLeftTop": [
+    "Face/Led/Blue/Left/0Deg/Actuator/Value",
+    "Face/Led/Blue/Left/315Deg/Actuator/Value",
+    "Face/Led/Green/Left/0Deg/Actuator/Value",
+    "Face/Led/Green/Left/315Deg/Actuator/Value",
+    "Face/Led/Red/Left/0Deg/Actuator/Value",
+    "Face/Led/Red/Left/315Deg/Actuator/Value"
+   ],
+   "FaceLedsRightBottom": [
+    "Face/Led/Blue/Right/135Deg/Actuator/Value",
+    "Face/Led/Blue/Right/180Deg/Actuator/Value",
+    "Face/Led/Green/Right/135Deg/Actuator/Value",
+    "Face/Led/Green/Right/180Deg/Actuator/Value",
+    "Face/Led/Red/Right/135Deg/Actuator/Value",
+    "Face/Led/Red/Right/180Deg/Actuator/Value"
+   ],
+   "FaceLedsRightExternal": [
+    "Face/Led/Blue/Right/45Deg/Actuator/Value",
+    "Face/Led/Blue/Right/90Deg/Actuator/Value",
+    "Face/Led/Green/Right/45Deg/Actuator/Value",
+    "Face/Led/Green/Right/90Deg/Actuator/Value",
+    "Face/Led/Red/Right/45Deg/Actuator/Value",
+    "Face/Led/Red/Right/90Deg/Actuator/Value"
+   ],
+   "FaceLedsRightInternal": [
+    "Face/Led/Blue/Right/225Deg/Actuator/Value",
+    "Face/Led/Blue/Right/270Deg/Actuator/Value",
+    "Face/Led/Green/Right/225Deg/Actuator/Value",
+    "Face/Led/Green/Right/270Deg/Actuator/Value",
+    "Face/Led/Red/Right/225Deg/Actuator/Value",
+    "Face/Led/Red/Right/270Deg/Actuator/Value"
+   ],
+   "FaceLedsRightTop": [
+    "Face/Led/Blue/Right/0Deg/Actuator/Value",
+    "Face/Led/Blue/Right/315Deg/Actuator/Value",
+    "Face/Led/Green/Right/0Deg/Actuator/Value",
+    "Face/Led/Green/Right/315Deg/Actuator/Value",
+    "Face/Led/Red/Right/0Deg/Actuator/Value",
+    "Face/Led/Red/Right/315Deg/Actuator/Value"
+   ],
+   "FaceLedsTop": [
+    "Face/Led/Blue/Left/0Deg/Actuator/Value",
+    "Face/Led/Blue/Left/315Deg/Actuator/Value",
+    "Face/Led/Blue/Right/0Deg/Actuator/Value",
+    "Face/Led/Blue/Right/315Deg/Actuator/Value",
+    "Face/Led/Green/Left/0Deg/Actuator/Value",
+    "Face/Led/Green/Left/315Deg/Actuator/Value",
+    "Face/Led/Green/Right/0Deg/Actuator/Value",
+    "Face/Led/Green/Right/315Deg/Actuator/Value",
+    "Face/Led/Red/Left/0Deg/Actuator/Value",
+    "Face/Led/Red/Left/315Deg/Actuator/Value",
+    "Face/Led/Red/Right/0Deg/Actuator/Value",
+    "Face/Led/Red/Right/315Deg/Actuator/Value"
+   ],
+   "FeetLeds": [
+    "LFoot/Led/Blue/Actuator/Value",
+    "LFoot/Led/Green/Actuator/Value",
+    "LFoot/Led/Red/Actuator/Value",
+    "RFoot/Led/Blue/Actuator/Value",
+    "RFoot/Led/Green/Actuator/Value",
+    "RFoot/Led/Red/Actuator/Value"
+   ],
+   "LeftEarLeds": [
+    "Ears/Led/Left/0Deg/Actuator/Value",
+    "Ears/Led/Left/108Deg/Actuator/Value",
+    "Ears/Led/Left/144Deg/Actuator/Value",
+    "Ears/Led/Left/180Deg/Actuator/Value",
+    "Ears/Led/Left/216Deg/Actuator/Value",
+    "Ears/Led/Left/252Deg/Actuator/Value",
+    "Ears/Led/Left/288Deg/Actuator/Value",
+    "Ears/Led/Left/324Deg/Actuator/Value",
+    "Ears/Led/Left/36Deg/Actuator/Value",
+    "Ears/Led/Left/72Deg/Actuator/Value"
+   ],
+   "LeftEarLedsBack": [
+    "Ears/Led/Left/180Deg/Actuator/Value",
+    "Ears/Led/Left/216Deg/Actuator/Value",
+    "Ears/Led/Left/252Deg/Actuator/Value",
+    "Ears/Led/Left/288Deg/Actuator/Value",
+    "Ears/Led/Left/324Deg/Actuator/Value"
+   ],
+   "LeftEarLedsEven": [
+    "Ears/Led/Left/0Deg/Actuator/Value",
+    "Ears/Led/Left/144Deg/Actuator/Value",
+    "Ears/Led/Left/216Deg/Actuator/Value",
+    "Ears/Led/Left/288Deg/Actuator/Value",
+    "Ears/Led/Left/72Deg/Actuator/Value"
+   ],
+   "LeftEarLedsFront": [
+    "Ears/Led/Left/0Deg/Actuator/Value",
+    "Ears/Led/Left/108Deg/Actuator/Value",
+    "Ears/Led/Left/144Deg/Actuator/Value",
+    "Ears/Led/Left/36Deg/Actuator/Value",
+    "Ears/Led/Left/72Deg/Actuator/Value"
+   ],
+   "LeftEarLedsOdd": [
+    "Ears/Led/Left/108Deg/Actuator/Value",
+    "Ears/Led/Left/180Deg/Actuator/Value",
+    "Ears/Led/Left/252Deg/Actuator/Value",
+    "Ears/Led/Left/324Deg/Actuator/Value",
+    "Ears/Led/Left/36Deg/Actuator/Value"
+   ],
+   "LeftFaceLeds": [
+    "Face/Led/Blue/Left/0Deg/Actuator/Value",
+    "Face/Led/Blue/Left/135Deg/Actuator/Value",
+    "Face/Led/Blue/Left/180Deg/Actuator/Value",
+    "Face/Led/Blue/Left/225Deg/Actuator/Value",
+    "Face/Led/Blue/Left/270Deg/Actuator/Value",
+    "Face/Led/Blue/Left/315Deg/Actuator/Value",
+    "Face/Led/Blue/Left/45Deg/Actuator/Value",
+    "Face/Led/Blue/Left/90Deg/Actuator/Value",
+    "Face/Led/Green/Left/0Deg/Actuator/Value",
+    "Face/Led/Green/Left/135Deg/Actuator/Value",
+    "Face/Led/Green/Left/180Deg/Actuator/Value",
+    "Face/Led/Green/Left/225Deg/Actuator/Value",
+    "Face/Led/Green/Left/270Deg/Actuator/Value",
+    "Face/Led/Green/Left/315Deg/Actuator/Value",
+    "Face/Led/Green/Left/45Deg/Actuator/Value",
+    "Face/Led/Green/Left/90Deg/Actuator/Value",
+    "Face/Led/Red/Left/0Deg/Actuator/Value",
+    "Face/Led/Red/Left/135Deg/Actuator/Value",
+    "Face/Led/Red/Left/180Deg/Actuator/Value",
+    "Face/Led/Red/Left/225Deg/Actuator/Value",
+    "Face/Led/Red/Left/270Deg/Actuator/Value",
+    "Face/Led/Red/Left/315Deg/Actuator/Value",
+    "Face/Led/Red/Left/45Deg/Actuator/Value",
+    "Face/Led/Red/Left/90Deg/Actuator/Value"
+   ],
+   "LeftFaceLedsBlue": [
+    "Face/Led/Blue/Left/0Deg/Actuator/Value",
+    "Face/Led/Blue/Left/135Deg/Actuator/Value",
+    "Face/Led/Blue/Left/180Deg/Actuator/Value",
+    "Face/Led/Blue/Left/225Deg/Actuator/Value",
+    "Face/Led/Blue/Left/270Deg/Actuator/Value",
+    "Face/Led/Blue/Left/315Deg/Actuator/Value",
+    "Face/Led/Blue/Left/45Deg/Actuator/Value",
+    "Face/Led/Blue/Left/90Deg/Actuator/Value"
+   ],
+   "LeftFaceLedsGreen": [
+    "Face/Led/Green/Left/0Deg/Actuator/Value",
+    "Face/Led/Green/Left/135Deg/Actuator/Value",
+    "Face/Led/Green/Left/180Deg/Actuator/Value",
+    "Face/Led/Green/Left/225Deg/Actuator/Value",
+    "Face/Led/Green/Left/270Deg/Actuator/Value",
+    "Face/Led/Green/Left/315Deg/Actuator/Value",
+    "Face/Led/Green/Left/45Deg/Actuator/Value",
+    "Face/Led/Green/Left/90Deg/Actuator/Value"
+   ],
+   "LeftFaceLedsRed": [
+    "Face/Led/Red/Left/0Deg/Actuator/Value",
+    "Face/Led/Red/Left/135Deg/Actuator/Value",
+    "Face/Led/Red/Left/180Deg/Actuator/Value",
+    "Face/Led/Red/Left/225Deg/Actuator/Value",
+    "Face/Led/Red/Left/270Deg/Actuator/Value",
+    "Face/Led/Red/Left/315Deg/Actuator/Value",
+    "Face/Led/Red/Left/45Deg/Actuator/Value",
+    "Face/Led/Red/Left/90Deg/Actuator/Value"
+   ],
+   "LeftFootLeds": [
+    "LFoot/Led/Blue/Actuator/Value",
+    "LFoot/Led/Green/Actuator/Value",
+    "LFoot/Led/Red/Actuator/Value"
+   ],
+   "RightEarLeds": [
+    "Ears/Led/Right/0Deg/Actuator/Value",
+    "Ears/Led/Right/108Deg/Actuator/Value",
+    "Ears/Led/Right/144Deg/Actuator/Value",
+    "Ears/Led/Right/180Deg/Actuator/Value",
+    "Ears/Led/Right/216Deg/Actuator/Value",
+    "Ears/Led/Right/252Deg/Actuator/Value",
+    "Ears/Led/Right/288Deg/Actuator/Value",
+    "Ears/Led/Right/324Deg/Actuator/Value",
+    "Ears/Led/Right/36Deg/Actuator/Value",
+    "Ears/Led/Right/72Deg/Actuator/Value"
+   ],
+   "RightEarLedsBack": [
+    "Ears/Led/Right/180Deg/Actuator/Value",
+    "Ears/Led/Right/216Deg/Actuator/Value",
+    "Ears/Led/Right/252Deg/Actuator/Value",
+    "Ears/Led/Right/288Deg/Actuator/Value",
+    "Ears/Led/Right/324Deg/Actuator/Value"
+   ],
+   "RightEarLedsEven": [
+    "Ears/Led/Right/0Deg/Actuator/Value",
+    "Ears/Led/Right/144Deg/Actuator/Value",
+    "Ears/Led/Right/216Deg/Actuator/Value",
+    "Ears/Led/Right/288Deg/Actuator/Value",
+    "Ears/Led/Right/72Deg/Actuator/Value"
+   ],
+   "RightEarLedsFront": [
+    "Ears/Led/Right/0Deg/Actuator/Value",
+    "Ears/Led/Right/108Deg/Actuator/Value",
+    "Ears/Led/Right/144Deg/Actuator/Value",
+    "Ears/Led/Right/36Deg/Actuator/Value",
+    "Ears/Led/Right/72Deg/Actuator/Value"
+   ],
+   "RightEarLedsOdd": [
+    "Ears/Led/Right/108Deg/Actuator/Value",
+    "Ears/Led/Right/180Deg/Actuator/Value",
+    "Ears/Led/Right/252Deg/Actuator/Value",
+    "Ears/Led/Right/324Deg/Actuator/Value",
+    "Ears/Led/Right/36Deg/Actuator/Value"
+   ],
+   "RightFaceLeds": [
+    "Face/Led/Blue/Right/0Deg/Actuator/Value",
+    "Face/Led/Blue/Right/135Deg/Actuator/Value",
+    "Face/Led/Blue/Right/180Deg/Actuator/Value",
+    "Face/Led/Blue/Right/225Deg/Actuator/Value",
+    "Face/Led/Blue/Right/270Deg/Actuator/Value",
+    "Face/Led/Blue/Right/315Deg/Actuator/Value",
+    "Face/Led/Blue/Right/45Deg/Actuator/Value",
+    "Face/Led/Blue/Right/90Deg/Actuator/Value",
+    "Face/Led/Green/Right/0Deg/Actuator/Value",
+    "Face/Led/Green/Right/135Deg/Actuator/Value",
+    "Face/Led/Green/Right/180Deg/Actuator/Value",
+    "Face/Led/Green/Right/225Deg/Actuator/Value",
+    "Face/Led/Green/Right/270Deg/Actuator/Value",
+    "Face/Led/Green/Right/315Deg/Actuator/Value",
+    "Face/Led/Green/Right/45Deg/Actuator/Value",
+    "Face/Led/Green/Right/90Deg/Actuator/Value",
+    "Face/Led/Red/Right/0Deg/Actuator/Value",
+    "Face/Led/Red/Right/135Deg/Actuator/Value",
+    "Face/Led/Red/Right/180Deg/Actuator/Value",
+    "Face/Led/Red/Right/225Deg/Actuator/Value",
+    "Face/Led/Red/Right/270Deg/Actuator/Value",
+    "Face/Led/Red/Right/315Deg/Actuator/Value",
+    "Face/Led/Red/Right/45Deg/Actuator/Value",
+    "Face/Led/Red/Right/90Deg/Actuator/Value"
+   ],
+   "RightFaceLedsBlue": [
+    "Face/Led/Blue/Right/0Deg/Actuator/Value",
+    "Face/Led/Blue/Right/135Deg/Actuator/Value",
+    "Face/Led/Blue/Right/180Deg/Actuator/Value",
+    "Face/Led/Blue/Right/225Deg/Actuator/Value",
+    "Face/Led/Blue/Right/270Deg/Actuator/Value",
+    "Face/Led/Blue/Right/315Deg/Actuator/Value",
+    "Face/Led/Blue/Right/45Deg/Actuator/Value",
+    "Face/Led/Blue/Right/90Deg/Actuator/Value"
+   ],
+   "RightFaceLedsGreen": [
+    "Face/Led/Green/Right/0Deg/Actuator/Value",
+    "Face/Led/Green/Right/135Deg/Actuator/Value",
+    "Face/Led/Green/Right/180Deg/Actuator/Value",
+    "Face/Led/Green/Right/225Deg/Actuator/Value",
+    "Face/Led/Green/Right/270Deg/Actuator/Value",
+    "Face/Led/Green/Right/315Deg/Actuator/Value",
+    "Face/Led/Green/Right/45Deg/Actuator/Value",
+    "Face/Led/Green/Right/90Deg/Actuator/Value"
+   ],
+   "RightFaceLedsRed": [
+    "Face/Led/Red/Right/0Deg/Actuator/Value",
+    "Face/Led/Red/Right/135Deg/Actuator/Value",
+    "Face/Led/Red/Right/180Deg/Actuator/Value",
+    "Face/Led/Red/Right/225Deg/Actuator/Value",
+    "Face/Led/Red/Right/270Deg/Actuator/Value",
+    "Face/Led/Red/Right/315Deg/Actuator/Value",
+    "Face/Led/Red/Right/45Deg/Actuator/Value",
+    "Face/Led/Red/Right/90Deg/Actuator/Value"
+   ],
+   "RightFootLeds": [
+    "RFoot/Led/Blue/Actuator/Value",
+    "RFoot/Led/Green/Actuator/Value",
+    "RFoot/Led/Red/Actuator/Value"
+   ]
+  },
+  "leds": {
+   "Brain0": [
+    "Head/Led/Front/Right/1/Actuator/Value"
+   ],
+   "Brain1": [
+    "Head/Led/Front/Right/0/Actuator/Value"
+   ],
+   "Brain10": [
+    "Head/Led/Front/Left/0/Actuator/Value"
+   ],
+   "Brain11": [
+    "Head/Led/Front/Left/1/Actuator/Value"
+   ],
+   "Brain2": [
+    "Head/Led/Middle/Right/0/Actuator/Value"
+   ],
+   "Brain3": [
+    "Head/Led/Rear/Right/0/Actuator/Value"
+   ],
+   "Brain4": [
+    "Head/Led/Rear/Right/1/Actuator/Value"
+   ],
+   "Brain5": [
+    "Head/Led/Rear/Right/2/Actuator/Value"
+   ],
+   "Brain6": [
+    "Head/Led/Rear/Left/2/Actuator/Value"
+   ],
+   "Brain7": [
+    "Head/Led/Rear/Left/1/Actuator/Value"
+   ],
+   "Brain8": [
+    "Head/Led/Rear/Left/0/Actuator/Value"
+   ],
+   "Brain9": [
+    "Head/Led/Middle/Left/0/Actuator/Value"
+   ],
+   "ChestLedsBlue": [
+    "ChestBoard/Led/Blue/Actuator/Value"
+   ],
+   "ChestLedsGreen": [
+    "ChestBoard/Led/Green/Actuator/Value"
+   ],
+   "ChestLedsRed": [
+    "ChestBoard/Led/Red/Actuator/Value"
+   ],
+   "LeftEarLed1": [
+    "Ears/Led/Left/0Deg/Actuator/Value"
+   ],
+   "LeftEarLed10": [
+    "Ears/Led/Left/324Deg/Actuator/Value"
+   ],
+   "LeftEarLed2": [
+    "Ears/Led/Left/36Deg/Actuator/Value"
+   ],
+   "LeftEarLed3": [
+    "Ears/Led/Left/72Deg/Actuator/Value"
+   ],
+   "LeftEarLed4": [
+    "Ears/Led/Left/108Deg/Actuator/Value"
+   ],
+   "LeftEarLed5": [
+    "Ears/Led/Left/144Deg/Actuator/Value"
+   ],
+   "LeftEarLed6": [
+    "Ears/Led/Left/180Deg/Actuator/Value"
+   ],
+   "LeftEarLed7": [
+    "Ears/Led/Left/216Deg/Actuator/Value"
+   ],
+   "LeftEarLed8": [
+    "Ears/Led/Left/252Deg/Actuator/Value"
+   ],
+   "LeftEarLed9": [
+    "Ears/Led/Left/288Deg/Actuator/Value"
+   ],
+   "LeftFaceLed1": [
+    "Face/Led/Blue/Left/0Deg/Actuator/Value",
+    "Face/Led/Green/Left/0Deg/Actuator/Value",
+    "Face/Led/Red/Left/0Deg/Actuator/Value"
+   ],
+   "LeftFaceLed2": [
+    "Face/Led/Blue/Left/45Deg/Actuator/Value",
+    "Face/Led/Green/Left/45Deg/Actuator/Value",
+    "Face/Led/Red/Left/45Deg/Actuator/Value"
+   ],
+   "LeftFaceLed3": [
+    "Face/Led/Blue/Left/90Deg/Actuator/Value",
+    "Face/Led/Green/Left/90Deg/Actuator/Value",
+    "Face/Led/Red/Left/90Deg/Actuator/Value"
+   ],
+   "LeftFaceLed4": [
+    "Face/Led/Blue/Left/135Deg/Actuator/Value",
+    "Face/Led/Green/Left/135Deg/Actuator/Value",
+    "Face/Led/Red/Left/135Deg/Actuator/Value"
+   ],
+   "LeftFaceLed5": [
+    "Face/Led/Blue/Left/180Deg/Actuator/Value",
+    "Face/Led/Green/Left/180Deg/Actuator/Value",
+    "Face/Led/Red/Left/180Deg/Actuator/Value"
+   ],
+   "LeftFaceLed6": [
+    "Face/Led/Blue/Left/225Deg/Actuator/Value",
+    "Face/Led/Green/Left/225Deg/Actuator/Value",
+    "Face/Led/Red/Left/225Deg/Actuator/Value"
+   ],
+   "LeftFaceLed7": [
+    "Face/Led/Blue/Left/270Deg/Actuator/Value",
+    "Face/Led/Green/Left/270Deg/Actuator/Value",
+    "Face/Led/Red/Left/270Deg/Actuator/Value"
+   ],
+   "LeftFaceLed8": [
+    "Face/Led/Blue/Left/315Deg/Actuator/Value",
+    "Face/Led/Green/Left/315Deg/Actuator/Value",
+    "Face/Led/Red/Left/315Deg/Actuator/Value"
+   ],
+   "LeftFootLedsBlue": [
+    "LFoot/Led/Blue/Actuator/Value"
+   ],
+   "LeftFootLedsGreen": [
+    "LFoot/Led/Green/Actuator/Value"
+   ],
+   "LeftFootLedsRed": [
+    "LFoot/Led/Red/Actuator/Value"
+   ],
+   "RightEarLed1": [
+    "Ears/Led/Right/0Deg/Actuator/Value"
+   ],
+   "RightEarLed10": [
+    "Ears/Led/Right/324Deg/Actuator/Value"
+   ],
+   "RightEarLed2": [
+    "Ears/Led/Right/36Deg/Actuator/Value"
+   ],
+   "RightEarLed3": [
+    "Ears/Led/Right/72Deg/Actuator/Value"
+   ],
+   "RightEarLed4": [
+    "Ears/Led/Right/108Deg/Actuator/Value"
+   ],
+   "RightEarLed5": [
+    "Ears/Led/Right/144Deg/Actuator/Value"
+   ],
+   "RightEarLed6": [
+    "Ears/Led/Right/180Deg/Actuator/Value"
+   ],
+   "RightEarLed7": [
+    "Ears/Led/Right/216Deg/Actuator/Value"
+   ],
+   "RightEarLed8": [
+    "Ears/Led/Right/252Deg/Actuator/Value"
+   ],
+   "RightEarLed9": [
+    "Ears/Led/Right/288Deg/Actuator/Value"
+   ],
+   "RightFaceLed1": [
+    "Face/Led/Blue/Right/0Deg/Actuator/Value",
+    "Face/Led/Green/Right/0Deg/Actuator/Value",
+    "Face/Led/Red/Right/0Deg/Actuator/Value"
+   ],
+   "RightFaceLed2": [
+    "Face/Led/Blue/Right/45Deg/Actuator/Value",
+    "Face/Led/Green/Right/45Deg/Actuator/Value",
+    "Face/Led/Red/Right/45Deg/Actuator/Value"
+   ],
+   "RightFaceLed3": [
+    "Face/Led/Blue/Right/90Deg/Actuator/Value",
+    "Face/Led/Green/Right/90Deg/Actuator/Value",
+    "Face/Led/Red/Right/90Deg/Actuator/Value"
+   ],
+   "RightFaceLed4": [
+    "Face/Led/Blue/Right/135Deg/Actuator/Value",
+    "Face/Led/Green/Right/135Deg/Actuator/Value",
+    "Face/Led/Red/Right/135Deg/Actuator/Value"
+   ],
+   "RightFaceLed5": [
+    "Face/Led/Blue/Right/180Deg/Actuator/Value",
+    "Face/Led/Green/Right/180Deg/Actuator/Value",
+    "Face/Led/Red/Right/180Deg/Actuator/Value"
+   ],
+   "RightFaceLed6": [
+    "Face/Led/Blue/Right/225Deg/Actuator/Value",
+    "Face/Led/Green/Right/225Deg/Actuator/Value",
+    "Face/Led/Red/Right/225Deg/Actuator/Value"
+   ],
+   "RightFaceLed7": [
+    "Face/Led/Blue/Right/270Deg/Actuator/Value",
+    "Face/Led/Green/Right/270Deg/Actuator/Value",
+    "Face/Led/Red/Right/270Deg/Actuator/Value"
+   ],
+   "RightFaceLed8": [
+    "Face/Led/Blue/Right/315Deg/Actuator/Value",
+    "Face/Led/Green/Right/315Deg/Actuator/Value",
+    "Face/Led/Red/Right/315Deg/Actuator/Value"
+   ],
+   "RightFootLedsBlue": [
+    "RFoot/Led/Blue/Actuator/Value"
+   ],
+   "RightFootLedsGreen": [
+    "RFoot/Led/Green/Actuator/Value"
+   ],
+   "RightFootLedsRed": [
+    "RFoot/Led/Red/Actuator/Value"
+   ]
+  }
+ },
+ "touch": [
+  {
+   "name": "HeadFront",
+   "event": "FrontTactilTouched",
+   "key": "Device/SubDeviceList/Head/Touch/Front/Sensor/Value",
+   "link": "HeadPitch"
+  },
+  {
+   "name": "HeadMiddle",
+   "event": "MiddleTactilTouched",
+   "key": "Device/SubDeviceList/Head/Touch/Middle/Sensor/Value",
+   "link": "HeadPitch"
+  },
+  {
+   "name": "HeadRear",
+   "event": "RearTactilTouched",
+   "key": "Device/SubDeviceList/Head/Touch/Rear/Sensor/Value",
+   "link": "HeadPitch"
+  },
+  {
+   "name": "LeftBumper",
+   "event": "LeftBumperPressed",
+   "key": "Device/SubDeviceList/LFoot/Bumper/Left/Sensor/Value",
+   "link": "LAnkleRoll"
+  },
+  {
+   "name": "RightBumper",
+   "event": "RightBumperPressed",
+   "key": "Device/SubDeviceList/RFoot/Bumper/Right/Sensor/Value",
+   "link": "RAnkleRoll"
+  },
+  {
+   "name": "LeftHandBack",
+   "event": "HandLeftBackTouched",
+   "key": "Device/SubDeviceList/LHand/Touch/Back/Sensor/Value",
+   "link": "LWristYaw"
+  },
+  {
+   "name": "RightHandBack",
+   "event": "HandRightBackTouched",
+   "key": "Device/SubDeviceList/RHand/Touch/Back/Sensor/Value",
+   "link": "RWristYaw"
+  },
+  {
+   "name": "ChestButton",
+   "event": "ALChestButton/SimpleClickOccurred",
+   "key": "Device/SubDeviceList/ChestBoard/Button/Sensor/Value",
+   "link": null
+  }
+ ],
+ "walk": {
+  "maxX": 0.35,
+  "maxY": 0.2,
+  "maxTheta": 0.52
+ },
+ "installPostures": "postures_naoh25.xml",
+ "meshes": {
+  "Torso": "naoTorsoV6",
+  "HeadYaw": "naoHeadYaw",
+  "HeadPitch": "naoHeadPitchV6",
+  "LShoulderPitch": "naoLShoulderPitch",
+  "LShoulderRoll": "naoLShoulderRollV6",
+  "LElbowRoll": "naoLElbowRoll",
+  "LWristYaw": "naoWristYawV6",
+  "LHipYawPitch": "naoLHipYawPitch",
+  "LHipRoll": "naoLHipRoll",
+  "LHipPitch": "naoLHipPitch",
+  "LKneePitch": "naoLKneePitchV6",
+  "LAnklePitch": "naoLAnklePitch",
+  "LAnkleRoll": "naoLAnkleRollV6",
+  "RShoulderPitch": "naoRShoulderPitch",
+  "RShoulderRoll": "naoRShoulderRollV6",
+  "RElbowRoll": "naoRElbowRoll",
+  "RWristYaw": "naoWristYawV6",
+  "RHipYawPitch": "naoRHipYawPitch",
+  "RHipRoll": "naoRHipRoll",
+  "RHipPitch": "naoRHipPitch",
+  "RKneePitch": "naoRKneePitchV6",
+  "RAnklePitch": "naoRAnklePitch",
+  "RAnkleRoll": "naoRAnkleRollV6"
+ },
+ "resources": {
+  "All motors": [
+   "Head",
+   "Arms",
+   "Legs"
+  ],
+  "Head": [
+   "HeadYaw",
+   "HeadPitch"
+  ],
+  "Arms": [
+   "Left arm",
+   "Right arm"
+  ],
+  "Left arm": [
+   "LShoulderPitch",
+   "LShoulderRoll",
+   "LElbowYaw",
+   "LElbowRoll",
+   "LWristYaw",
+   "LHand"
+  ],
+  "Right arm": [
+   "RShoulderPitch",
+   "RShoulderRoll",
+   "RElbowYaw",
+   "RElbowRoll",
+   "RWristYaw",
+   "RHand"
+  ],
+  "Legs": [
+   "LHipYawPitch",
+   "RHipYawPitch",
+   "Left leg",
+   "Right leg"
+  ],
+  "Left leg": [
+   "LHipRoll",
+   "LHipPitch",
+   "LKneePitch",
+   "LAnklePitch",
+   "LAnkleRoll"
+  ],
+  "Right leg": [
+   "RHipRoll",
+   "RHipPitch",
+   "RKneePitch",
+   "RAnklePitch",
+   "RAnkleRoll"
+  ],
+  "Leds": [
+   "Left eye leds",
+   "Right eye leds",
+   "Left ear leds",
+   "Right ear leds",
+   "Chest leds",
+   "Head leds",
+   "Left foot leds",
+   "Right foot leds"
+  ],
+  "Tactile sequences": [
+   "Head-sequence",
+   "Left arm-sequence",
+   "Right arm-sequence"
+  ],
+  "Audio": [
+   "Speakers",
+   "Microphones"
+  ],
+  "Speakers": [
+   "Speech",
+   "Audio player"
+  ],
+  "Microphones": [
+   "Speech recognition",
+   "Audio recorder"
+  ],
+  "Stiffness": [
+   "Head-stiffness",
+   "Arms-stiffness",
+   "Legs-stiffness"
+  ]
+ },
+ "initialAngles": [
+  0,
+  -0.170000032,
+  1.44258392,
+  0.224456638,
+  -1.20227718,
+  -0.417271703,
+  0.0999999791,
+  0.300000012,
+  -0.170009688,
+  0.119108438,
+  0.12741895,
+  -0.0923279151,
+  0.0874193981,
+  -0.110793173,
+  -0.170009688,
+  -0.119102433,
+  0.127419189,
+  -0.0923279151,
+  0.0874193311,
+  0.110789023,
+  1.44258428,
+  -0.224456564,
+  1.20227718,
+  0.417271554,
+  0.0999999791,
+  0.300000012
+ ],
+ "bodyGroups": {
+  "Joints": [
+   "HeadYaw",
+   "HeadPitch",
+   "LShoulderPitch",
+   "LShoulderRoll",
+   "LElbowYaw",
+   "LElbowRoll",
+   "LWristYaw",
+   "LHipYawPitch",
+   "LHipRoll",
+   "LHipPitch",
+   "LKneePitch",
+   "LAnklePitch",
+   "LAnkleRoll",
+   "RHipYawPitch",
+   "RHipRoll",
+   "RHipPitch",
+   "RKneePitch",
+   "RAnklePitch",
+   "RAnkleRoll",
+   "RShoulderPitch",
+   "RShoulderRoll",
+   "RElbowYaw",
+   "RElbowRoll",
+   "RWristYaw"
+  ],
+  "Actuators": [
+   "LHand",
+   "RHand"
+  ],
+  "BodyJoints": [
+   "HeadYaw",
+   "HeadPitch",
+   "LShoulderPitch",
+   "LShoulderRoll",
+   "LElbowYaw",
+   "LElbowRoll",
+   "LWristYaw",
+   "LHipYawPitch",
+   "LHipRoll",
+   "LHipPitch",
+   "LKneePitch",
+   "LAnklePitch",
+   "LAnkleRoll",
+   "RHipYawPitch",
+   "RHipRoll",
+   "RHipPitch",
+   "RKneePitch",
+   "RAnklePitch",
+   "RAnkleRoll",
+   "RShoulderPitch",
+   "RShoulderRoll",
+   "RElbowYaw",
+   "RElbowRoll",
+   "RWristYaw"
+  ],
+  "BodyActuators": [
+   "LHand",
+   "RHand"
+  ],
+  "JointActuators": [
+   "HeadYaw",
+   "HeadPitch",
+   "LShoulderPitch",
+   "LShoulderRoll",
+   "LElbowYaw",
+   "LElbowRoll",
+   "LWristYaw",
+   "LHand",
+   "LHipYawPitch",
+   "LHipRoll",
+   "LHipPitch",
+   "LKneePitch",
+   "LAnklePitch",
+   "LAnkleRoll",
+   "RHipYawPitch",
+   "RHipRoll",
+   "RHipPitch",
+   "RKneePitch",
+   "RAnklePitch",
+   "RAnkleRoll",
+   "RShoulderPitch",
+   "RShoulderRoll",
+   "RElbowYaw",
+   "RElbowRoll",
+   "RWristYaw",
+   "RHand"
+  ],
+  "Arms": [
+   "LShoulderPitch",
+   "LShoulderRoll",
+   "LElbowYaw",
+   "LElbowRoll",
+   "LWristYaw",
+   "LHand",
+   "RShoulderPitch",
+   "RShoulderRoll",
+   "RElbowYaw",
+   "RElbowRoll",
+   "RWristYaw",
+   "RHand"
+  ],
+  "Legs": [
+   "LHipYawPitch",
+   "LHipRoll",
+   "LHipPitch",
+   "LKneePitch",
+   "LAnklePitch",
+   "LAnkleRoll",
+   "RHipYawPitch",
+   "RHipRoll",
+   "RHipPitch",
+   "RKneePitch",
+   "RAnklePitch",
+   "RAnkleRoll"
+  ]
+ },
+ "chainOrder": [
+  "Head",
+  "LArm",
+  "LLeg",
+  "RLeg",
+  "RArm"
+ ]
+}

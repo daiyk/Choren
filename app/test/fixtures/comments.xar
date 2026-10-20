@@ -1,0 +1,26 @@
+<ChoregrapheProject><Box id="-1" name="root"><Timeline enable="0"><BehaviorLayer><BehaviorKeyframe index="1"><Diagram>
+<Box id="1" name="Gesture (Anger) v2" x="140" y="120"><Timeline enable="0"><BehaviorLayer><BehaviorKeyframe index="1"><Diagram>
+<Box id="51" name="Step 1" plugin="textedit_plugin" x="100" y="100">
+<script><content><![CDATA[generated_script = True]]></content></script>
+<pluginContent><text>
+  <![CDATA[Introduction
+Ask the child to copy the gesture.]]>
+</text></pluginContent>
+<Input id="1" name="onLoad" inner="1" nature="0" type="1"/>
+</Box>
+<Box id="52" name="Step 1.1" plugin="textedit_plugin" x="370" y="100">
+<pluginContent><text>
+  <![CDATA[Second try — don't repeat Step 1.
+Keep <b>this</b> & every line as plain text.
+Line 3
+Line 4
+Line 5
+Line 6
+Line 7
+Line 8
+The final instruction.]]>
+</text></pluginContent>
+</Box>
+<Box id="53" name="Empty note" plugin="textedit_plugin" x="640" y="100"><pluginContent><text/></pluginContent></Box>
+</Diagram></BehaviorKeyframe></BehaviorLayer></Timeline></Box>
+</Diagram></BehaviorKeyframe></BehaviorLayer></Timeline></Box></ChoregrapheProject>

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ChoregrapheBox xar_version="3">
+    <Box name="Say" id="1" localization="8" tooltip="Says the text with the robot's text-to-speech voice." x="0" y="0">
+        <script language="4">
+            <content>
+                <![CDATA[class MyClass(GeneratedClass):
+    def __init__(self):
+        GeneratedClass.__init__(self)
+
+    def onLoad(self):
+        self.tts = self.session().service("ALTextToSpeech")
+        self.pending = None
+
+    def onUnload(self):
+        if self.pending is not None:
+            self.tts.stopAll()
+            self.pending = None
+
+    def onInput_onStart(self):
+        self.pending = self.tts.say(self.getParameter("Text"), _async=True)
+        self.pending.value()
+        self.pending = None
+        self.onStopped()
+
+    def onInput_onStop(self):
+        self.onUnload()
+        self.onStopped()]]>
+</content>
+        </script>
+        <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" />
+        <Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="Starts the box." id="2" />
+        <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Stops the box." id="3" />
+        <Output name="onStopped" type="1" type_size="1" nature="1" inner="0" tooltip="Sent when the box has finished." id="4" />
+        <Parameter name="Text" inherits_from_parent="0" content_type="5" value="Hello" default_value="Hello" tooltip="Text to say." id="5" />
+        <Resource name="Speech" type="Lock" timeout="0" />
+    </Box>
+</ChoregrapheBox>

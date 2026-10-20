@@ -1,0 +1,34 @@
+# Local reference installation and tools
+/Choregraphe 2.8.8/
+/.rea-tools/
+
+# Local notes and agent files (kept on disk, never committed)
+/docs/
+/.claude/
+/.agents/
+/.codex/
+/.mcp.json
+skills-lock.json
+CLAUDE.md
+AGENTS.md
+.cc-writes/
+
+# Dependencies and generated output
+node_modules/
+dist/
+dist-ssr/
+target/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+*.local
+
+# Logs, caches, and operating-system files
+*.log
+__pycache__/
+*.py[cod]
+.DS_Store
+._*
+Thumbs.db

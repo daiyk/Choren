@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Folder expanded="no">
+    <Node name="Animation" />
+    <Node name="LEDs" />
+    <Node name="Movement" />
+    <Node name="Multimedia" />
+    <Node name="Programming" />
+    <Node name="Sensing" />
+    <Node name="Speech" />
+</Folder>

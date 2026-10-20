@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ChoregrapheBox xar_version="3">
+    <Box name="Tactile Head" id="1" localization="8" tooltip="Sends an output when a head touch sensor is pressed." x="0" y="0">
+        <script language="4">
+            <content>
+                <![CDATA[class MyClass(GeneratedClass):
+    def __init__(self):
+        GeneratedClass.__init__(self)
+
+    def onInput_FrontTactilTouched(self, value):
+        if value:
+            self.front()
+
+    def onInput_MiddleTactilTouched(self, value):
+        if value:
+            self.middle()
+
+    def onInput_RearTactilTouched(self, value):
+        if value:
+            self.rear()]]>
+</content>
+        </script>
+        <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" />
+        <Input name="FrontTactilTouched" type="0" type_size="1" nature="4" stm_value_name="FrontTactilTouched" inner="0" tooltip="Front head sensor." id="2" />
+        <Input name="MiddleTactilTouched" type="0" type_size="1" nature="4" stm_value_name="MiddleTactilTouched" inner="0" tooltip="Middle head sensor." id="3" />
+        <Input name="RearTactilTouched" type="0" type_size="1" nature="4" stm_value_name="RearTactilTouched" inner="0" tooltip="Rear head sensor." id="4" />
+        <Output name="front" type="1" type_size="1" nature="2" inner="0" tooltip="Front sensor pressed." id="5" />
+        <Output name="middle" type="1" type_size="1" nature="2" inner="0" tooltip="Middle sensor pressed." id="6" />
+        <Output name="rear" type="1" type_size="1" nature="2" inner="0" tooltip="Rear sensor pressed." id="7" />
+    </Box>
+</ChoregrapheBox>

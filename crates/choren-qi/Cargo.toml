@@ -1,0 +1,9 @@
+[package]
+name = "choren-qi"
+description = "Rust implementation of the libqi (QiMessaging) protocol, based on libqi: values, signatures, messages, client and server"
+edition.workspace = true
+version.workspace = true
+license = "MIT AND BSD-3-Clause"
+
+[dependencies]
+tokio = { version = "1", features = ["net", "io-util", "rt-multi-thread", "sync", "macros", "time"] }

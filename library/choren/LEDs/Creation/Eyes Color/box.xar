@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ChoregrapheBox xar_version="3">
+    <Box name="Eyes Color" id="1" localization="8" tooltip="Fades the eye LEDs to a color." x="0" y="0">
+        <script language="4">
+            <content>
+                <![CDATA[class MyClass(GeneratedClass):
+    def __init__(self):
+        GeneratedClass.__init__(self)
+
+    def onInput_onStart(self):
+        color = int(self.getParameter("Color (hex)").lstrip("#"), 16)
+        self.session().service("ALLeds").fadeRGB("FaceLeds", color, float(self.getParameter("Duration (s)")))
+        self.onStopped()]]>
+</content>
+        </script>
+        <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" />
+        <Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="Starts the box." id="2" />
+        <Output name="onStopped" type="1" type_size="1" nature="1" inner="0" tooltip="Sent when the box has finished." id="3" />
+        <Parameter name="Color (hex)" inherits_from_parent="0" content_type="3" value="#00a0ff" default_value="#00a0ff" tooltip="Color as #RRGGBB." id="4" />
+        <Parameter name="Duration (s)" inherits_from_parent="0" content_type="2" value="0.5" default_value="0.5" min="0" max="10" tooltip="Fade duration." id="5" />
+        <Resource name="Left eye leds" type="Lock" timeout="0" />
+        <Resource name="Right eye leds" type="Lock" timeout="0" />
+    </Box>
+</ChoregrapheBox>

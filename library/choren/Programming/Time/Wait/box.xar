@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ChoregrapheBox xar_version="3">
+    <Box name="Wait" id="1" localization="8" choren_category="timer" tooltip="Waits before sending the output. Stimulating onStart again restarts the delay." x="0" y="0">
+        <script language="4">
+            <content>
+                <![CDATA[import threading
+
+class MyClass(GeneratedClass):
+    def __init__(self):
+        GeneratedClass.__init__(self)
+
+    def onLoad(self):
+        self.timer = None
+
+    def onUnload(self):
+        if self.timer is not None:
+            self.timer.cancel()
+            self.timer = None
+
+    def onInput_onStart(self):
+        self.onUnload()
+        self.timer = threading.Timer(float(self.getParameter("Delay (s)")), self.timeout)
+        self.timer.start()
+
+    def onInput_onStop(self):
+        self.onUnload()]]>
+</content>
+        </script>
+        <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" />
+        <Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="Starts the box." id="2" />
+        <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Stops the box." id="3" />
+        <Output name="timeout" type="1" type_size="1" nature="1" inner="0" tooltip="Sent when the delay has elapsed." id="4" />
+        <Parameter name="Delay (s)" inherits_from_parent="0" content_type="2" value="1.0" default_value="1.0" min="0" max="3600" tooltip="Delay in seconds." id="5" />
+    </Box>
+</ChoregrapheBox>

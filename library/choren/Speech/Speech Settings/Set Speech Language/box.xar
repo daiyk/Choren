@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ChoregrapheBox xar_version="3">
+    <Box name="Set Speech Language" id="1" localization="8" tooltip="Changes the text-to-speech language." x="0" y="0">
+        <script language="4">
+            <content>
+                <![CDATA[class MyClass(GeneratedClass):
+    def __init__(self):
+        GeneratedClass.__init__(self)
+
+    def onInput_onStart(self):
+        self.session().service("ALTextToSpeech").setLanguage(self.getParameter("Language"))
+        self.onStopped()]]>
+</content>
+        </script>
+        <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" />
+        <Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="Starts the box." id="2" />
+        <Output name="onStopped" type="1" type_size="1" nature="1" inner="0" tooltip="Sent when the box has finished." id="3" />
+        <Parameter name="Language" inherits_from_parent="0" content_type="3" value="English" default_value="English" custom_choice="0" tooltip="Language name." id="4">
+            <Choice value="English" />
+            <Choice value="French" />
+            <Choice value="German" />
+            <Choice value="Japanese" />
+            <Choice value="Chinese" />
+            <Choice value="Spanish" />
+            <Choice value="Italian" />
+        </Parameter>
+    </Box>
+</ChoregrapheBox>
