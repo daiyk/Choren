@@ -24,13 +24,13 @@ jobs:
         target: [aarch64-apple-darwin, x86_64-apple-darwin]
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Tag matches the app version
         if: github.ref_type == 'tag'
         run: test "${GITHUB_REF_NAME#v}" = "$(node -p "require('./app/src-tauri/tauri.conf.json').version")"
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
@@ -83,6 +83,6 @@ jobs:
             open it once, then choose **Open Anyway** in System Settings → Privacy & Security, or run
             `xattr -dr com.apple.quarantine /Applications/Choren.app`.
           releaseDraft: true
-          uploadUpdaterJson: ${{ env.UPDATER }}
+          includeUpdaterJson: ${{ env.UPDATER }}
           # `app` produces the signed .app.tar.gz the updater installs.
           args: --target ${{ matrix.target }} --bundles app,dmg ${{ env.UPDATER_ARGS }}
