@@ -1,6 +1,6 @@
 import { ServicesPanel, ApplicationsPanel, CameraPanel } from "../robot/services";
 import { ActiveContentPanel } from "../robot/ActiveContent";
-import { ResourcePanel, HistoryPanel } from "./ResourcePanel";
+import { ResourcePanel, HistoryPanel, useResourceActions } from "./ResourcePanel";
 import { authoring } from "./authoring";
 import { lazy, Suspense, useCallback, useLayoutEffect, useMemo, useState } from "react";
 import type { IDockviewPanelProps } from "dockview-react";
@@ -22,7 +22,8 @@ import {
 } from "lucide-react";
 import type { Box, Port, ProjectDocument, ProjectFile } from "../format/types";
 import { Diagram } from "../diagram/Diagram";
-import { Timeline } from "../timeline/Timeline";
+import { Timeline, type TimelineMenuTarget } from "../timeline/Timeline";
+import { useContextMenu, copyText, type MenuAction } from "./ContextMenu";
 import { MotionPanel, useActiveTimeline } from "../timeline/Curves";
 import { RobotDialogPanel } from "../robot/DialogPanel";
 import { DialogPanel, TranslationsPanel } from "./projectText";
@@ -150,55 +151,61 @@ function fileTree(files: ProjectFile[]): FileTree[] {
   }
   return root;
 }
-function FileBranches({ entries }: { entries: FileTree[] }) {
+function behaviorActions(ws: ReturnType<typeof useWorkspace>, behaviorId: string): MenuAction[] {
+  const editable = ws.editable && ws.state.project?.format === "pml";
+  return [
+    {label: "Open behavior", run: () => ws.openBehavior(behaviorId)},
+    {label: "Behavior properties…", run: () => ws.execute("properties", {behaviorId}), disabled: !editable, reason: "An editable project folder is required."},
+    {label: "Export behavior…", run: () => ws.execute("export-crg", {behaviorId}), disabled: !ws.editable, reason: "Open this project in the desktop app."},
+    {label: "Remove behavior from project…", run: () => ws.execute("remove-behavior", {behaviorId}), disabled: !editable, reason: "An editable project folder is required."},
+  ];
+}
+function boxActions(ws: ReturnType<typeof useWorkspace>, box: Box, address: GraphAddress): MenuAction[] {
+  const target = {address, boxId: box.id};
+  const reveal = () => ws.navigate(address, String(box.id));
+  return [
+    {label: "Reveal in diagram", run: reveal},
+    {label: box.timeline ? "Open contents" : "Open script", run: () => ws.openBox(box, address), disabled: !box.timeline && !scriptOpenable(box), reason: "This box has no editable contents."},
+    {label: "Properties", run: () => {reveal(); ws.showPanel("inspector");}},
+    ...[["cut", "Cut"], ["copy", "Copy"], ["convert-to-box", "Group into box…"], ["delete", "Delete box"]].map(([id, label]) => ({label, run: () => ws.execute(id, target), disabled: !ws.editable || box.node === undefined, reason: "This box is read-only."})),
+  ];
+}
+function FileBranch({entry}: {entry: FileTree}) {
   const ws = useWorkspace();
-  return (
-    <ul className="file-tree">
-      {entries.map((entry) => (
-        <li key={entry.path}>
-          {entry.children.length ? (
-            <details open>
-              <summary>
-                <FolderOpen size={14} />
-                <span>{entry.name}</span>
-              </summary>
-              <FileBranches entries={entry.children} />
-            </details>
-          ) : (
-            <button
-              className="tree-row"
-              title={entry.path}
-              draggable={entry.file?.kind === "resource"}
-              onDragStart={(event) => {
-                event.dataTransfer.setData(PROJECT_FILE_MIME, entry.path);
-                event.dataTransfer.effectAllowed = "link";
-              }}
-              onClick={() =>
-                entry.file?.behaviorId
-                  ? ws.openBehavior(entry.file.behaviorId)
-                  : entry.file && ws.inspectFile(entry.file)
-              }
-            >
-              {entry.file?.kind === "behavior" ? (
-                <Workflow size={14} />
-              ) : (
-                <File size={14} />
-              )}
-              <span>{entry.name}</span>
-              {entry.file?.missing && (
-                <AlertTriangle size={13} className="warning" />
-              )}
-            </button>
-          )}
-        </li>
-      ))}
-    </ul>
-  );
+  const resource = useResourceActions(entry.file);
+  const menu = useContextMenu([ws.state.project, resource.busy], message => ws.notify(message, "error"));
+  const open = () => entry.file?.behaviorId ? ws.openBehavior(entry.file.behaviorId) : entry.file && ws.inspectFile(entry.file);
+  return <li>{menu.element}{resource.element}{entry.children.length ? <details open>
+    <summary {...menu.trigger(event => {
+      const details = event.currentTarget.parentElement!;
+      return [
+        {label: "Expand subtree", run: () => {details.querySelectorAll("details").forEach(d => d.open = true); (details as HTMLDetailsElement).open = true;}},
+        {label: "Collapse subtree", run: () => {details.querySelectorAll("details").forEach(d => d.open = false); (details as HTMLDetailsElement).open = false;}},
+        ...["files", "folder"].map(kind => ({label: `Import ${kind} here…`, run: () => ws.execute(`import-${kind}`, {destination: entry.path}), disabled: !ws.editable || ws.state.project?.format !== "pml", reason: "An editable project folder is required."})),
+      ];
+    })}><FolderOpen size={14}/><span>{entry.name}</span></summary>
+    <FileBranches entries={entry.children}/>
+  </details> : <button className="tree-row" title={entry.path} draggable={entry.file?.kind === "resource"}
+    onDragStart={event => {event.dataTransfer.setData(PROJECT_FILE_MIME, entry.path); event.dataTransfer.effectAllowed = "link";}}
+    onClick={open} {...menu.trigger(() => entry.file?.behaviorId ? behaviorActions(ws, entry.file.behaviorId) : [
+      {label: "Open / Preview", run: open}, ...resource.actions,
+    ])}>
+    {entry.file?.kind === "behavior" ? <Workflow size={14}/> : <File size={14}/>}<span>{entry.name}</span>
+    {entry.file?.missing && <AlertTriangle size={13} className="warning"/>}
+  </button>}</li>;
+}
+function FileBranches({ entries }: { entries: FileTree[] }) {
+  return <ul className="file-tree">{entries.map(entry => <FileBranch key={entry.path} entry={entry}/>)}</ul>;
 }
 function ProjectPanel() {
   const ws = useWorkspace();
   const project = ws.state.project;
   const [query, setQuery] = useState("");
+  const menu = useContextMenu([project, query], message => ws.notify(message, "error"));
+  const actions = () => [["new", "New behavior…"], ["import-behavior", "Import behavior…"], ["import-files", "Import files…"], ["import-folder", "Import folder…"], ["new-dialog", "New dialog topic…"], ["properties", "Project properties"]].map(([id, label]) => {
+    const command = ws.commands.find(c => c.id === id);
+    return {label, run: () => ws.execute(id), disabled: !command?.enabled, reason: command?.reason};
+  });
   if (!project)
     return (
       <Empty title="No project open" icon={<FolderOpen size={25} />}>
@@ -207,7 +214,7 @@ function ProjectPanel() {
       </Empty>
     );
   return (
-    <div className="panel-column">
+    <div className="panel-column" tabIndex={0} {...menu.trigger(actions)}>{menu.element}
       <div className="project-heading">
         <div className="project-avatar">
           <Workflow size={18} />
@@ -294,10 +301,13 @@ function OutlineOwner({
   root?: boolean;
 }) {
   const ws = useWorkspace();
+  const menu = useContextMenu([ws.state.project, address.behaviorId, JSON.stringify(address)], message => ws.notify(message, "error"));
+  const ownerActions = () => root ? behaviorActions(ws, address.behaviorId) : boxActions(ws, owner, {...address, levels: address.levels.slice(0, -1)});
   const hasChildren = owner.timeline?.layers.some((l) => l.keyframes.length);
   const entry = (
     <button
       className="tree-row"
+      {...menu.trigger(ownerActions)}
       onClick={() =>
         root
           ? ws.navigate(address)
@@ -311,17 +321,24 @@ function OutlineOwner({
       <span>{name}</span>
     </button>
   );
-  if (!hasChildren) return entry;
+  if (!hasChildren) return <>{entry}{menu.element}</>;
   return (
-    <details className="outline-owner" open={root}>
-      <summary>
+    <details className="outline-owner" open={root}>{menu.element}
+      <summary {...menu.trigger(ownerActions)}>
         <span>{name}</span>
       </summary>
       {root && entry}
       {owner.timeline!.layers.map((layer, li) => (
         <div key={li}>
           {owner.timeline!.enabled && (
-            <div className="tree-section">{layer.name}</div>
+            <div className="tree-section" tabIndex={0} {...menu.trigger(event => {
+              const section = event.currentTarget.parentElement!;
+              return [
+                {label: "Reveal in timeline", run: () => {ws.navigate({...address, levels: [...address.levels.slice(0, -1), {...address.levels.at(-1)!, layer: li, keyframe: 0}]}); ws.showPanel("timeline");}},
+                {label: "Expand subtree", run: () => section.querySelectorAll("details").forEach(d => d.open = true)},
+                {label: "Collapse subtree", run: () => section.querySelectorAll("details").forEach(d => d.open = false)},
+              ];
+            })}>{layer.name}</div>
           )}
           {layer.keyframes.map((kf, ki) => {
             const at = {
@@ -336,6 +353,14 @@ function OutlineOwner({
                 {owner.timeline!.enabled && (
                   <button
                     className="tree-row keyframe-row"
+                    {...menu.trigger(event => {
+                      const section = event.currentTarget.parentElement!;
+                      return [
+                        {label: "Reveal in diagram", run: () => ws.navigate(at)},
+                        {label: "Expand subtree", run: () => section.querySelectorAll("details").forEach(d => d.open = true)},
+                        {label: "Collapse subtree", run: () => section.querySelectorAll("details").forEach(d => d.open = false)},
+                      ];
+                    })}
                     onClick={() => ws.navigate(at)}
                   >
                     <span className="diamond">◇</span>
@@ -349,6 +374,7 @@ function OutlineOwner({
                       className="tree-row"
                       onClick={() => ws.navigate(at, String(box.id))}
                       onDoubleClick={() => ws.openBox(box, at)}
+                      {...menu.trigger(() => boxActions(ws, box, at))}
                     >
                       <Workflow size={13} />
                       <span>{box.name}</span>
@@ -379,12 +405,13 @@ function OutlineOwner({
 function OutlinePanel() {
   const ws = useWorkspace();
   const [query, setQuery] = useState("");
+  const menu = useContextMenu([ws.state.project, query], message => ws.notify(message, "error"));
   const entries = useMemo(
     () => (ws.state.project ? outline(ws.state.project) : []),
     [ws.state.project],
   );
   return (
-    <div className="panel-column">
+    <div className="panel-column">{menu.element}
       <SearchField
         label="Find behaviors and boxes"
         value={query}
@@ -399,6 +426,7 @@ function OutlinePanel() {
                   className="search-result"
                   key={i}
                   onClick={() => ws.reveal(entry)}
+                  {...menu.trigger(() => entry.kind === "behavior" ? behaviorActions(ws, entry.address.behaviorId) : boxActions(ws, entry.box, entry.address))}
                 >
                   <Workflow size={14} />
                   <span>
@@ -517,7 +545,7 @@ function GraphDocument({ behaviorId, api }: { behaviorId: string; api: IDockview
               ["copy", "Copy", <Copy size={13} />],
               ["paste", "Paste", <ClipboardPaste size={13} />],
               ["delete", "Delete", <Trash2 size={13} />],
-              ["convert-to-box", "Group into box", <Workflow size={13} />],
+              ["convert-to-box", "Group into box…", <Workflow size={13} />],
             ] as const
           ).map(([id, title, icon]) => {
             const command = ws.commands.find((c) => c.id === id);
@@ -575,6 +603,7 @@ function GraphDocument({ behaviorId, api }: { behaviorId: string; api: IDockview
               : undefined
           }
           onCommand={ws.execute}
+          commands={ws.commands}
           glowing={glowing}
         />
       ) : (
@@ -603,7 +632,7 @@ function GraphDocument({ behaviorId, api }: { behaviorId: string; api: IDockview
 function TimelinePanel() {
   const ws = useWorkspace();
   const active = useActiveTimeline();
-  const [properties, setProperties] = useState(false);
+  const [properties, setProperties] = useState<{identity: string; layer?: number; keyframe?: number}>();
   const [keyframeClipboard, setKeyframeClipboard] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -695,7 +724,7 @@ function TimelinePanel() {
       <button
         onClick={() => {
           setError("");
-          setProperties(true);
+          setProperties({identity: `${ws.state.session}:${key}:${ws.history?.revision}`, layer: layer?.node, keyframe: keyframe?.node});
         }}
       >
         Timeline properties…
@@ -704,7 +733,7 @@ function TimelinePanel() {
         void authoring.copy(ws.state.project!.session!, address.behaviorId, [keyframe!.node!])
           .then(setKeyframeClipboard).catch(e => ws.notify(String(e), "error"));
       }}>Copy keyframe</button>
-      <button disabled={!keyframeClipboard || layer?.node === undefined} onClick={() => void ws.edit("Paste keyframe", [
+      <button disabled={!keyframeClipboard || layer?.node === undefined || layer.keyframes.some(k => k.index === value.frame)} title={!keyframeClipboard ? "Copy a keyframe first." : "Choose an unoccupied frame."} onClick={() => void ws.edit("Paste keyframe", [
         {type: "pasteKeyframes", layer: layer!.node!, xml: keyframeClipboard, index: value.frame},
       ])}>Paste keyframe</button>
       <label className="checkbox"><input type="checkbox" checked={!!layer?.mute} disabled={layer?.node === undefined}
@@ -747,10 +776,48 @@ function TimelinePanel() {
       </label>
     </div>
   );
+  const menuActions = (target: TimelineMenuTarget): MenuAction[] => {
+    const targetLayer = target.layer === undefined ? undefined : t.layers[target.layer];
+    const targetKey = target.keyframe === undefined ? undefined : targetLayer?.keyframes[target.keyframe];
+    const write = (label: string, commands: Parameters<typeof ws.edit>[1]) => ws.edit(label, commands, address.behaviorId);
+    const reason = !edit ? "Open an editable project to change the timeline." : undefined;
+    const propertiesAction: MenuAction = {label: targetKey ? "Keyframe properties…" : targetLayer ? "Layer properties…" : "Timeline properties…",
+      disabled: !edit, reason, run: () => {setError(""); setProperties({identity: `${ws.state.session}:${key}:${ws.history?.revision}`, layer: targetLayer?.node, keyframe: targetKey?.node});}};
+    if (targetKey) return [
+      {label: "Open diagram", run: () => ws.navigate({...address, levels: [...address.levels.slice(0, -1), {...address.levels.at(-1)!, layer: target.layer!, keyframe: target.keyframe!}]})},
+      {label: "Copy keyframe", disabled: !edit || targetKey.node === undefined, reason, run: () => authoring.copy(ws.state.project!.session!, address.behaviorId, [targetKey.node!]).then(setKeyframeClipboard)},
+      propertiesAction,
+      {label: "Delete keyframe", disabled: !edit || targetKey.node === undefined || targetLayer!.keyframes.length < 2,
+        reason: reason ?? "A layer must keep at least one keyframe.", run: () => write("Delete keyframe", [{type: "remove", nodes: [targetKey.node!]}])},
+    ];
+    if (targetLayer) return [
+      {label: `Move playhead to frame ${target.frame}`, run: () => ws.saveTimeline(key, {...value, frame: target.frame})},
+      {label: `New keyframe at frame ${target.frame}`, disabled: !edit || targetLayer.node === undefined || targetLayer.keyframes.some(k => k.index === target.frame), reason: reason ?? "A keyframe already exists at this frame.", run: () => {
+        let name = `keyframe${target.frame}`, suffix = 2;
+        while (targetLayer.keyframes.some(k => k.name === name)) name = `keyframe${target.frame}_${suffix++}`;
+        return write("Add keyframe", [{type: "insertXml", parent: targetLayer.node!, xml: `<BehaviorKeyframe name="${name}" index="${target.frame}"><Diagram /></BehaviorKeyframe>`}]);
+      }},
+      {label: `Paste keyframe at frame ${target.frame}`, disabled: !edit || targetLayer.node === undefined || !keyframeClipboard || targetLayer.keyframes.some(k => k.index === target.frame), reason: reason ?? (!keyframeClipboard ? "Copy a keyframe first." : "Choose an unoccupied frame."), run: () => write("Paste keyframe", [{type: "pasteKeyframes", layer: targetLayer.node!, xml: keyframeClipboard, index: target.frame}])},
+      {label: targetLayer.mute ? "Unmute layer" : "Mute layer", checked: !!targetLayer.mute, disabled: !edit || targetLayer.node === undefined, reason, run: () => write("Mute layer", [{type: "setAttributes", node: targetLayer.node!, values: {mute: targetLayer.mute ? "0" : "1"}}])},
+      propertiesAction,
+      {label: "Delete layer", disabled: !edit || targetLayer.node === undefined || t.layers.length < 2, reason: reason ?? "A timeline must keep at least one layer.", run: () => write("Delete layer", [{type: "remove", nodes: [targetLayer.node!]}])},
+    ];
+    return [
+      {label: "New layer", disabled: !edit, reason, run: () => write("Add new layer", [{type: "insertXml", parent: t.node!, xml: `<BehaviorLayer name="behavior_layer${nextLayer}"><BehaviorKeyframe name="keyframe1" index="1"><Diagram /></BehaviorKeyframe></BehaviorLayer>`}])},
+      propertiesAction,
+      {label: "Motion curves", run: () => ws.showPanel("curves")},
+      {label: "Record motion", run: () => ws.showPanel("recording")},
+    ];
+  };
+  const propertiesLayer = properties ? t.layers.find(l => l.node === properties.layer) : undefined;
+  const propertiesKeyframe = propertiesLayer?.keyframes.find(k => k.node === properties?.keyframe);
   return (
     <div className="panel-column">
       {timelineEdit}
       <Timeline
+        menuIdentity={`${ws.state.session}:${key}:${ws.history?.revision}`}
+        menuActions={menuActions}
+        onMenuError={message => ws.notify(message, "error")}
         robotFrame={active.robotFrame}
         t={t}
         onMoveKeyframe={edit ? async (node, delta) => {
@@ -784,14 +851,14 @@ function TimelinePanel() {
           });
         }}
       />
-      {properties && (
+      {properties?.identity === `${ws.state.session}:${key}:${ws.history?.revision}` && (
         <Modal
           title="Timeline properties"
-          onClose={() => !saving && setProperties(false)}
+          onClose={() => !saving && setProperties(undefined)}
         >
           <form
             className="settings-content"
-            key={`${key}:${layer?.node}:${keyframe?.node}`}
+            key={`${key}:${propertiesLayer?.node}:${propertiesKeyframe?.node}`}
             onSubmit={async (e) => {
               e.preventDefault();
               if (saving) return;
@@ -807,20 +874,20 @@ function TimelinePanel() {
                   node: t.node!,
                   values: { size: String(size) },
                 });
-              if (layer?.node !== undefined && data.get("layer") !== layer.name)
+              if (propertiesLayer?.node !== undefined && data.get("layer") !== propertiesLayer.name)
                 commands.push({
                   type: "setAttributes",
-                  node: layer.node,
+                  node: propertiesLayer.node,
                   values: { name: String(data.get("layer")).trim() },
                 });
               if (
-                keyframe?.node !== undefined &&
-                (data.get("keyframe") !== keyframe.name ||
-                  Number(data.get("frame")) !== keyframe.index)
+                propertiesKeyframe?.node !== undefined &&
+                (data.get("keyframe") !== propertiesKeyframe.name ||
+                  Number(data.get("frame")) !== propertiesKeyframe.index)
               )
                 commands.push({
                   type: "setAttributes",
-                  node: keyframe.node,
+                  node: propertiesKeyframe.node,
                   values: {
                     name: String(data.get("keyframe")).trim(),
                     index: String(data.get("frame")),
@@ -834,7 +901,7 @@ function TimelinePanel() {
               const acquisition = String(data.get("acquisition"));
               if (acquisition !== String(t.resourcesAcquisition ?? 0)) commands.push({type: "setAttributes", node: t.node!, values: {resources_acquisition: acquisition}});
               if (!commands.length) {
-                setProperties(false);
+                setProperties(undefined);
                 return;
               }
               setSaving(true);
@@ -854,12 +921,12 @@ function TimelinePanel() {
               const updated = resolveAddress(result.document, address)?.owner
                 .timeline;
               const li =
-                updated?.layers.findIndex((l) => l.node === layer?.node) ?? -1;
+                updated?.layers.findIndex((l) => l.node === propertiesLayer?.node) ?? -1;
               const ki =
                 li < 0
                   ? -1
                   : updated!.layers[li].keyframes.findIndex(
-                      (k) => k.node === keyframe?.node,
+                      (k) => k.node === propertiesKeyframe?.node,
                     );
               if (li >= 0 && ki >= 0)
                 ws.navigate({
@@ -869,7 +936,7 @@ function TimelinePanel() {
                     { ...address.levels.at(-1)!, layer: li, keyframe: ki },
                   ],
                 });
-              setProperties(false);
+              setProperties(undefined);
             }}
           >
             <label className="setting">
@@ -889,20 +956,20 @@ function TimelinePanel() {
             <label className="setting">Resource acquisition<select name="acquisition" defaultValue={t.resourcesAcquisition ?? 0}>
               {["Passive", "Waiting", "Aggressive"].map((name, i) => <option key={name} value={i}>{name}</option>)}
             </select></label>
-            {layer && (
+            {propertiesLayer && (
               <label className="setting">
                 Layer name
-                <input name="layer" required defaultValue={layer.name} />
+                <input name="layer" required defaultValue={propertiesLayer.name} />
               </label>
             )}
-            {keyframe && (
+            {propertiesKeyframe && (
               <>
                 <label className="setting">
                   Keyframe name
                   <input
                     name="keyframe"
                     required
-                    defaultValue={keyframe.name}
+                    defaultValue={propertiesKeyframe.name}
                   />
                 </label>
                 <label className="setting">
@@ -913,7 +980,7 @@ function TimelinePanel() {
                     min={1}
                     step={1}
                     required
-                    defaultValue={keyframe.index}
+                    defaultValue={propertiesKeyframe.index}
                   />
                 </label>
               </>
@@ -934,10 +1001,14 @@ function TimelinePanel() {
 }
 function ProblemsPanel() {
   const ws = useWorkspace();
+  const menu = useContextMenu([ws.diagnostics], message => ws.notify(message, "error"));
   return ws.diagnostics.length ? (
-    <div className="problems panel-scroll">
+    <div className="problems panel-scroll">{menu.element}
       {ws.diagnostics.map((d) => (
-        <div className="problem" key={d.id}>
+        <div className="problem" key={d.id} tabIndex={0} {...menu.trigger(() => [
+          {label: "Copy message", run: () => copyText(d.message)},
+          ...(d.path ? [{label: "Copy path", run: () => copyText(d.path!)}] : []),
+        ])}>
           <AlertTriangle size={15} />
           <div>
             <strong>{d.message}</strong>

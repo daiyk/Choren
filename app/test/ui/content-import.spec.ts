@@ -19,7 +19,7 @@ async function backend(page: Page, format = "pml") {
           }
           if (command === "plugin:dialog|open") return picks.shift() ?? null;
           if (command.startsWith("plugin:") || command === "authorize_project_root") return;
-          if (command === "library_index") return [];
+          if (command === "library_tree") return [];
           if (command === "robot_status") return null;
           if (command === "project_open") {
             const { openProject } = await import(/* @vite-ignore */ `${location.origin}/src/format/project.ts`);

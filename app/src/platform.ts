@@ -48,7 +48,18 @@ export interface LibraryEntry {
   category: string;
   /** Backend only: "install", "choren" (bundled clean-room library) or "user". */
   source?: string;
+  root?: string;
+  relativePath?: string;
 }
+export interface LibraryTreeNode {
+  name: string; relativePath: string; kind: "folder" | "box";
+  boxFile: string | null; hasScript: boolean; children: LibraryTreeNode[];
+}
+export interface LibraryRoot {
+  path: string; name: string; source: string; writable: boolean; children: LibraryTreeNode[];
+}
+export const libraryTree = (shareDir?: string | null, userDirs: string[] = []) =>
+  invoke<LibraryRoot[]>("library_tree", { shareDir: shareDir || null, userDirs });
 export async function indexLibrary(
   root?: string | null,
   userDirs: string[] = [],

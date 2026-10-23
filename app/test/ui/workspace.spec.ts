@@ -22,6 +22,29 @@ async function command(page: Page, title: string) {
   await page.getByRole("textbox", { name: "Search commands" }).fill(title);
   await page.getByRole("button", { name: title, exact: false }).last().click();
 }
+test("read-only context menus expose navigation and explain disabled edits", async ({ page }) => {
+  await example(page);
+  for (const style of ["choren", "classic"]) {
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("combobox", { name: "Graph UI", exact: true }).selectOption(style);
+    await page.getByRole("button", { name: "Close dialog" }).click();
+    await node(page, "Say hello").click({ button: "right" });
+    const menu = page.getByRole("menu", { name: "Diagram actions" });
+    await expect(menu.getByRole("menuitem", { name: "Open Say hello" })).toBeEnabled();
+    await expect(menu.getByRole("menuitem", { name: "Properties", exact: true })).toBeEnabled();
+    await expect(menu.getByRole("menuitem", { name: "Delete box" })).toBeDisabled();
+    await expect(menu.getByRole("menuitem", { name: "Delete box" })).toHaveAttribute("title", /read-only/);
+    await page.keyboard.press("Escape");
+    await page.locator(".react-flow__edge").first().focus();
+    await page.keyboard.press("Shift+F10");
+    await expect(menu.getByRole("menuitem")).toHaveText(["Delete connection"]);
+    await expect(menu.getByRole("menuitem")).toBeDisabled();
+    await expect(menu).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+  }
+});
+
 test("Graph UI preference applies to nested diagrams and recovers from an invalid saved value", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("choren.graph-style", '"obsolete"'));
   await example(page);

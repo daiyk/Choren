@@ -6,6 +6,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { native } from "../platform";
 import { Modal } from "../workspace/Modal";
 import { useRobot } from "./store";
+import { useContextMenu, type MenuAction } from "../workspace/ContextMenu";
 
 interface Entry { name: string; dir: boolean; size: number }
 interface Listing { path: string; entries: Entry[] }
@@ -34,6 +35,7 @@ export function FilesPanel() {
   const mounted = useRef(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const menu = useContextMenu([folder, entries, busy], e => setError(String(e)));
   useEffect(() => { setAddress((current) => current || robotHost); }, [robotHost]);
   useEffect(() => {
     mounted.current = true;
@@ -99,6 +101,21 @@ export function FilesPanel() {
     await invoke("sftp_download", { remote: join(folder!, entry.name), local });
     setNotice(`Downloaded ${entry.name}`);
   });
+  const remove = (entry: Entry) => {
+    if (!folder || busy) return;
+    setConfirmation({ title: "Delete item?", detail: `Delete “${entry.name}” from the robot? This cannot be undone.${entry.dir ? " The folder must be empty." : ""}`, action: "Delete", work: async () => {
+      await invoke("sftp_remove", { path: join(folder, entry.name), dir: entry.dir });
+      await cd(folder);
+      setNotice(`Deleted ${entry.name}`);
+    } });
+  };
+  const createFolder = () => { setError(""); setNewFolder(""); };
+  const backgroundActions = (): MenuAction[] => [
+    {label: "Upload file…", run: upload, disabled: busy, reason: "Wait for the current operation."},
+    {label: "New folder…", run: createFolder, disabled: busy, reason: "Wait for the current operation."},
+    {label: "Parent folder", run: () => run(() => cd(parent(folder!))), disabled: busy || folder === "/", reason: busy ? "Wait for the current operation." : "Already at the root folder."},
+    {label: "Refresh files", run: () => run(() => cd(folder!)), disabled: busy, reason: "Wait for the current operation."},
+  ];
   if (!native) return <p className="panel-message">File transfer is available in the desktop app.</p>;
   if (folder === undefined) return (
     <div className="files-connect panel-scroll">
@@ -124,7 +141,8 @@ export function FilesPanel() {
     </div>
   );
   return (
-    <section className="files-panel panel-column" aria-label="Robot file browser">
+    <section className="files-panel panel-column" aria-label="Robot file browser" tabIndex={0} {...menu.trigger(backgroundActions)}>
+      {menu.element}
       <header className="files-heading">
         <span className="files-emblem"><Server size={20} /></span>
         <div className="files-identity"><h2>Robot files</h2><span title={`${user.trim()}@${address.trim()}`}>{user.trim()}@{address.trim()}</span></div>
@@ -137,15 +155,9 @@ export function FilesPanel() {
       <div className="files-actions">
         <button className="primary" disabled={busy} onClick={() => void upload()}><Upload size={15} />Upload file</button>
         <button disabled={busy || !selected || selected.dir} onClick={() => void download(selected!)}><Download size={15} />Download</button>
-        <button disabled={busy} onClick={() => { setError(""); setNewFolder(""); }}><FolderPlus size={15} />New folder</button>
+        <button disabled={busy} onClick={createFolder}><FolderPlus size={15} />New folder</button>
         <span className="spacer" />
-        <button className="icon-button" aria-label="Delete selected item" title="Delete selected item" disabled={busy || !selected} onClick={() => {
-          if (selected) setConfirmation({ title: "Delete item?", detail: `Delete “${selected.name}” from the robot? This cannot be undone.${selected.dir ? " The folder must be empty." : ""}`, action: "Delete", work: async () => {
-            await invoke("sftp_remove", { path: join(folder, selected.name), dir: selected.dir });
-            await cd(folder);
-            setNotice(`Deleted ${selected.name}`);
-          } });
-        }}><Trash2 size={15} /></button>
+        <button className="icon-button" aria-label="Delete selected item" title="Delete selected item" disabled={busy || !selected} onClick={() => { if (selected) remove(selected); }}><Trash2 size={15} /></button>
       </div>
       <div className="files-path">
         <button className="icon-button" aria-label="Parent folder" title="Parent folder" disabled={busy || folder === "/"} onClick={() => void run(() => cd(parent(folder)))}><ArrowUp size={15} /></button>
@@ -157,7 +169,13 @@ export function FilesPanel() {
       <div className="panel-scroll" aria-busy={busy}>
         {entries.length ? <table className="files-table" aria-label="Robot files">
           <thead><tr><th scope="col">Name</th><th scope="col">Size</th></tr></thead>
-          <tbody>{entries.map((entry) => <tr key={entry.name} aria-selected={selected === entry} className={selected === entry ? "selected" : undefined}
+          <tbody>{entries.map((entry) => <tr key={entry.name} tabIndex={0} {...menu.trigger(() => {
+            if (!busy) setSelected(entry);
+            return [
+              {label: entry.dir ? "Open folder" : "Download…", run: () => entry.dir ? run(() => cd(join(folder, entry.name))) : download(entry), disabled: busy, reason: "Wait for the current operation."},
+              {label: entry.dir ? "Delete empty folder…" : "Delete file…", run: () => remove(entry), disabled: busy, reason: "Wait for the current operation."},
+            ];
+          })} aria-selected={selected === entry} className={selected === entry ? "selected" : undefined}
             onClick={() => { if (!busy) setSelected(entry); }}
             onDoubleClick={() => { if (!busy) void (entry.dir ? run(() => cd(join(folder, entry.name))) : download(entry)); }}>
             <td><div className="files-name">

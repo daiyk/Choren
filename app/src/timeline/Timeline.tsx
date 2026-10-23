@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Minus, Plus } from "lucide-react";
 import type { Timeline as TimelineModel } from "../format/types";
 import type { TimelineView } from "../workspace/model";
+import { useContextMenu, type MenuAction } from "../workspace/ContextMenu";
+export interface TimelineMenuTarget { layer?: number; keyframe?: number; frame: number }
 const LABEL = 144,
   RULER = 26,
   ROW = 30;
@@ -12,11 +14,15 @@ interface Props {
   robotFrame?: number;
   onChange: (value: TimelineView) => void;
   onMoveKeyframe?: (node: number, delta: number) => void;
+  menuIdentity?: string;
+  onMenuError?: (message: string) => void;
+  menuActions?: (target: TimelineMenuTarget) => MenuAction[];
   onPick: (layer: number, keyframe: number, frame?: number) => void;
 }
-export function Timeline({ t, active, value, robotFrame, onChange, onPick, onMoveKeyframe }: Props) {
+export function Timeline({ t, active, value, robotFrame, onChange, onPick, onMoveKeyframe, menuIdentity, menuActions, onMenuError }: Props) {
   const drag = useRef<{node?: number; start: number; x: number; frame: number; moved: boolean} | undefined>(undefined);
   const suppressClick = useRef(false);
+  const menu = useContextMenu([menuIdentity, t], onMenuError);
   const host = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ width: 640, height: 160 });
@@ -202,8 +208,19 @@ export function Timeline({ t, active, value, robotFrame, onChange, onPick, onMov
     const scale = Math.max(0.25, Math.min(48, value.scale * factor));
     onChange({ ...value, scale, scroll: (scroll * scale) / value.scale });
   };
+  const actions = (target: TimelineMenuTarget): MenuAction[] => [
+    ...(menuActions?.(target) ?? []),
+    { label: "Zoom in", run: () => zoom(1.25) },
+    { label: "Zoom out", run: () => zoom(0.8) },
+  ];
+  const openMenu = (event: React.MouseEvent | React.KeyboardEvent, target: TimelineMenuTarget) => {
+    drag.current = undefined;
+    suppressClick.current = false;
+    menu.open(event, actions(target));
+  };
   return (
-    <section className="timeline-tool" aria-label="Timeline">
+    <section className="timeline-tool" aria-label="Timeline" {...menu.trigger(() => actions({frame: value.frame}))}>
+      {menu.element}
       <div className="panel-toolbar timeline-toolbar">
         <label>
           Frame{" "}
@@ -237,6 +254,12 @@ export function Timeline({ t, active, value, robotFrame, onChange, onPick, onMov
         </button>
       </div>
       <div className="timeline-keyframes">
+        <button aria-label="Timeline layer actions" disabled={!t.layers.length}
+          onClick={e => openMenu(e, {layer: active.layer, frame: value.frame})}
+          {...menu.trigger(() => actions({layer: active.layer, frame: value.frame}))}>Layer actions…</button>
+        <button aria-label="Timeline keyframe actions" disabled={!t.layers[active.layer]?.keyframes.length}
+          onClick={e => openMenu(e, {layer: active.layer, keyframe: active.keyframe, frame: value.frame})}
+          {...menu.trigger(() => actions({layer: active.layer, keyframe: active.keyframe, frame: value.frame}))}>Keyframe actions…</button>
         <label>
           Layer{" "}
           <select
@@ -281,6 +304,7 @@ export function Timeline({ t, active, value, robotFrame, onChange, onPick, onMov
         className="timeline-viewport"
         ref={host}
         onWheel={(e) => {
+          menu.close();
           if (e.ctrlKey || e.metaKey) zoom(e.deltaY < 0 ? 1.1 : 0.9);
           else if (
             e.shiftKey ||
@@ -304,6 +328,20 @@ export function Timeline({ t, active, value, robotFrame, onChange, onPick, onMov
           ref={canvas}
           style={{ width: size.width, height: size.height }}
           aria-label="Timeline overview; use the frame, layer and keyframe controls to navigate"
+          tabIndex={0}
+          onKeyDown={e => {
+            if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10"))
+              openMenu(e, {layer: active.layer, keyframe: active.keyframe, frame: value.frame});
+          }}
+          onContextMenu={e => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = e.clientX - rect.left, y = e.clientY - rect.top;
+            const frame = x < LABEL ? value.frame : Math.min(frames, Math.max(1, Math.round((x - LABEL + scroll) / value.scale) + 1));
+            const li = Math.floor((y - RULER + rowOffset) / ROW);
+            const layer = y >= RULER && li >= 0 && li < t.layers.length ? li : undefined;
+            const ki = layer !== undefined && x >= LABEL ? t.layers[layer].keyframes.findIndex(k => Math.abs(LABEL + (k.index - 1) * value.scale - scroll - x) <= 7) : -1;
+            openMenu(e, {frame, layer, keyframe: ki >= 0 ? ki : undefined});
+          }}
           onPointerDown={e => {
             const rect = e.currentTarget.getBoundingClientRect();
             const x = e.clientX - rect.left, y = e.clientY - rect.top;

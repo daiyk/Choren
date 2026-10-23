@@ -24,7 +24,7 @@ async function backend(page: Page, panel = "Show Robot files") {
           if (command === "plugin:dialog|open") return (window as any).uploadPath;
           if (command === "plugin:dialog|save") return "/local/saved.wav";
           if (command.startsWith("plugin:")) return;
-          if (command === "library_index") return [];
+          if (command === "library_tree") return [];
           if (command === "robot_status") return null;
           if (command === "sftp_connect") {
             if ((window as any).failConnect) throw "SSH authentication error.";

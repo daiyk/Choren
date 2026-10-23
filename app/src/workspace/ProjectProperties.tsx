@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
 import type { BehaviorManifest, Manifest, Requirements } from "./authoring";
 import { Modal } from "./Modal";
@@ -51,9 +51,14 @@ const permissions: BehaviorManifest["permissions"] = ["canRunInSleep", "canRunOn
 const localized = [["names", "Names"], ["descriptions", "Descriptions"], ["tags", "Tags"], ["triggerSentences", "Trigger sentences"], ["loadingResponses", "Loading responses"]] as const;
 const robotFields = [["minHeadVersion", "Minimum head version"], ["maxHeadVersion", "Maximum head version"], ["minBodyVersion", "Minimum body version"], ["maxBodyVersion", "Maximum body version"]] as const;
 
-export function ProjectProperties({ initial, onApply, onClose, onRaw }: {
-  initial: Manifest; onApply: (manifest: Manifest) => Promise<unknown>; onClose: () => void; onRaw: () => void;
+export function ProjectProperties({ initial, initialBehaviorPath, onApply, onClose, onRaw }: {
+  initial: Manifest; initialBehaviorPath?: string; onApply: (manifest: Manifest) => Promise<unknown>; onClose: () => void; onRaw: () => void;
 }) {
+  const form = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    const section = [...(form.current?.querySelectorAll<HTMLDetailsElement>(".behavior-properties") ?? [])].find(element => element.dataset.path === initialBehaviorPath);
+    if (section) {section.open = true; section.scrollIntoView({block: "center"}); section.querySelector("input")?.focus({preventScroll: true});}
+  }, [initialBehaviorPath]);
   const [manifest, setManifest] = useState(initial);
   const [languages, setLanguages] = useState(initial.supportedLanguages.join(", "));
   const [busy, setBusy] = useState(false);
@@ -64,7 +69,7 @@ export function ProjectProperties({ initial, onApply, onClose, onRaw }: {
   const setRobot = (i: number, patch: Partial<Requirements["robots"][number]>) =>
     setRequirements({ ...requirements, robots: requirements.robots.map((r, n) => n === i ? { ...r, ...patch } : r) });
   return <Modal title="Project properties" wide onClose={() => !busy && onClose()}>
-    <form className="settings-content project-properties" onSubmit={async e => {
+    <form ref={form} className="settings-content project-properties" onSubmit={async e => {
       e.preventDefault();
       if (busy) return;
       setBusy(true); setError("");
@@ -88,7 +93,7 @@ export function ProjectProperties({ initial, onApply, onClose, onRaw }: {
         </section>
         <section className="pp-section">
           <h3>Behaviors <span className="pp-count">{manifest.behaviors?.length ?? 0}</span></h3>
-          {(manifest.behaviors ?? []).map((b, i) => <details key={b.path} className="behavior-properties">
+          {(manifest.behaviors ?? []).map((b, i) => <details key={b.path} className="behavior-properties" data-path={b.path}>
             <summary><span className="pp-summary-title">{b.path}</span><span className="badge">{b.nature === "solitary" ? "Solitary" : "Interactive"}</span>{b.userRequestable && <span className="badge">User-requestable</span>}</summary>
             <div className="pp-behavior">
               <Field label="Nature"><select aria-label={`${b.path} nature`} value={b.nature} onChange={e => setBehavior(i, { nature: e.target.value as BehaviorManifest["nature"] })}><option value="interactive">Interactive</option><option value="solitary">Solitary</option></select></Field>

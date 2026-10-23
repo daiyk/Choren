@@ -37,6 +37,22 @@ pub fn library_index(app: AppHandle, share_dir: Option<String>, user_dirs: Optio
 }
 
 #[tauri::command]
+pub fn library_tree(app: AppHandle, share_dir: Option<String>, user_dirs: Option<Vec<String>>) -> Result<Vec<library::TreeRoot>, String> {
+    let mut roots = vec![library::tree(&choren_root(&app)?, "choren", false)?];
+    if let Some(share) = share_dir {
+        let root = Path::new(&share).join("libraries/box");
+        readable(&app, &root)?;
+        roots.push(library::tree(&root, "install", false)?);
+    }
+    for dir in user_dirs.unwrap_or_default() {
+        readable(&app, Path::new(&dir))?;
+        let root = library::tree(Path::new(&dir), "user", user_library(&app, &dir).is_ok())?;
+        if !roots.iter().any(|existing| existing.path == root.path) { roots.push(root); }
+    }
+    Ok(roots)
+}
+
+#[tauri::command]
 pub fn library_box(app: AppHandle, path: String) -> Result<view::BoxView, String> {
     let path = PathBuf::from(path);
     readable(&app, &path)?;

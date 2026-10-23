@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getRobot, robot, useRobot } from "./store";
+import { useContextMenu } from "../workspace/ContextMenu";
 
 /** Live conversation; topic-file editing remains in the Dialog / QiChat panel. */
 export function RobotDialogPanel() {
@@ -12,6 +13,7 @@ export function RobotDialogPanel() {
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
   const [busy, setBusy] = useState(false);
+  const menu = useContextMenu([status, transcript], e => setError(String(e)));
   const log = useRef<HTMLDivElement>(null);
   useEffect(() => { log.current?.scrollTo(0, log.current.scrollHeight); }, [transcript]);
   useEffect(() => {
@@ -40,7 +42,7 @@ export function RobotDialogPanel() {
     catch (e) { if (getRobot().status === status) setError(String(e)); }
     finally { setBusy(false); }
   };
-  return <div className="panel-column robot-dialog">
+  return <div className="panel-column robot-dialog">{menu.element}
     <div className="panel-toolbar">
       <label>Language <select aria-label="Dialog language" value={language} disabled={!status || busy || !language} onChange={e => {
         const next = e.target.value;
@@ -50,8 +52,11 @@ export function RobotDialogPanel() {
     </div>
     <p className="panel-message">{status ? `Active topics: ${topics.join(", ") || "none"}` : "Connect to a robot to start a conversation."}</p>
     {(error || loadError) && <p className="error" role="alert">{error || loadError}</p>}
-    <div className="panel-scroll dialog-transcript" role="log" aria-label="Robot conversation" ref={log}>
-      {transcript.map((line, i) => <p key={i}><strong>{line.speaker}:</strong> {line.text}</p>)}
+    <div className="panel-scroll dialog-transcript" role="log" aria-label="Robot conversation" ref={log} tabIndex={0} {...menu.trigger(() => [
+      {label: "Copy conversation", run: () => navigator.clipboard.writeText(transcript.map(line => `${line.speaker}: ${line.text}`).join("\n")), disabled: !transcript.length, reason: "The conversation is empty."},
+      {label: "Clear conversation", run: robot.clearDialog, disabled: !status, reason: "Connect to a robot first."},
+    ])}>
+      {transcript.map((line, i) => <p key={i} tabIndex={0} {...menu.trigger(() => [{label: "Copy message", run: () => navigator.clipboard.writeText(`${line.speaker}: ${line.text}`)}])}><strong>{line.speaker}:</strong> {line.text}</p>)}
     </div>
     <form className="panel-toolbar" onSubmit={e => {
       e.preventDefault();

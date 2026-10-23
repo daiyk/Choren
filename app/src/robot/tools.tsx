@@ -7,6 +7,7 @@ import { useShareDir } from "../icons";
 import { native } from "../platform";
 import { useWorkspace } from "../workspace/context";
 import { Modal } from "../workspace/Modal";
+import { useContextMenu, type MenuAction } from "../workspace/ContextMenu";
 import { graphId, resolveAddress } from "../workspace/model";
 import {
   getRobot,
@@ -72,6 +73,8 @@ export function PosesPanel() {
   const [folder, setFolder] = useState("My poses");
   const [editingPose, setEditingPose] = useState<{original: Pose; value: Pose}>();
   const [poseBusy, setPoseBusy] = useState(false);
+  const poseName = useRef<HTMLInputElement>(null);
+  const menu = useContextMenu([status, libs, userFile, poseBusy], e => setError(String(e)));
   const files = useMemo(
     () =>
       [
@@ -137,7 +140,8 @@ export function PosesPanel() {
       }),
     );
   };
-  const remove = (pose: Pose) =>
+  const remove = (pose: Pose) => {
+    if (poseBusy || !window.confirm(`Delete pose “${pose.name}” from your library? This cannot be undone.`)) return;
     run(
       invoke<Pose[]>("poses_write", {
         path: userFile,
@@ -146,8 +150,18 @@ export function PosesPanel() {
         setLibs((l) => l.map((x) => (x.user ? { ...x, poses } : x))),
       ),
     );
+  };
+  const chooseLibrary = () => run(save({
+    title: "User pose library", defaultPath: "poses.xap", filters: [{ name: "Pose library", extensions: ["xap"] }],
+  }).then(f => { if (f) setUserFile(f); }));
+  const properties = (pose: Pose) => {setError(undefined); setEditingPose({original: pose, value: {...pose}});};
+  const backgroundActions = (): MenuAction[] => [
+    {label: "Choose user library…", run: chooseLibrary, disabled: poseBusy, reason: "Wait for the current operation."},
+    {label: "Store current pose…", run: () => poseName.current?.focus(), disabled: !status || !descriptor || !userFile || poseBusy, reason: poseBusy ? "Wait for the current operation." : !userFile ? "Choose a user library first." : "Connect to a robot first."},
+  ];
   return (
-    <div className="panel-column">
+    <div className="panel-column" tabIndex={0} {...menu.trigger(backgroundActions)}>
+      {menu.element}
       <div className="pose-toolbar">
         <div className="pose-library">
           <span className={userFile ? undefined : "muted"} title={userFile || undefined}>
@@ -155,15 +169,8 @@ export function PosesPanel() {
           </span>
           <button
             title="Choose or create the .xap file that stores your poses"
-            onClick={() =>
-              run(
-                save({
-                  title: "User pose library",
-                  defaultPath: "poses.xap",
-                  filters: [{ name: "Pose library", extensions: ["xap"] }],
-                }).then((f) => f && setUserFile(f)),
-              )
-            }
+            disabled={poseBusy}
+            onClick={chooseLibrary}
           >
             <FolderOpen size={13} />
             {userFile ? "Change…" : "Choose…"}
@@ -172,6 +179,7 @@ export function PosesPanel() {
         <div className="pose-store">
           <input aria-label="New pose folder" placeholder="Folder" value={folder} onChange={e => setFolder(e.target.value)} />
           <input
+            ref={poseName}
             aria-label="New pose name"
             placeholder="Pose name"
             value={name}
@@ -210,6 +218,14 @@ export function PosesPanel() {
                   key={p.name}
                   className="pose-row"
                   role="listitem"
+                  tabIndex={0}
+                  {...menu.trigger(() => [
+                    {label: "Apply pose", run: () => apply(p), disabled: !status || !descriptor, reason: "Connect to a robot first."},
+                    ...(lib.user ? [
+                      {label: "Properties…", run: () => properties(p), disabled: poseBusy, reason: "Wait for the current operation."},
+                      {label: "Delete pose…", run: () => remove(p), disabled: poseBusy, reason: "Wait for the current operation."},
+                    ] : []),
+                  ])}
                 >
                   <div className="pose-text">
                     <strong title={p.name}>{p.name}</strong>
@@ -222,10 +238,11 @@ export function PosesPanel() {
                   >
                     Apply
                   </button>
-                  {lib.user && <button className="icon-button" aria-label={`Properties of ${p.name}`} title="Properties" onClick={() => {setError(undefined); setEditingPose({original: p, value: {...p}});}}><Pencil size={13} /></button>}
+                  {lib.user && <button className="icon-button" aria-label={`Properties of ${p.name}`} title="Properties" disabled={poseBusy} onClick={() => properties(p)}><Pencil size={13} /></button>}
                   {lib.user && (
                     <button
                       className="icon-button"
+                      disabled={poseBusy}
                       aria-label={`Delete ${p.name}`}
                       title="Delete"
                       onClick={() => remove(p)}
@@ -272,6 +289,16 @@ export function MemoryPanel() {
   const [available, setAvailable] = useState<string[]>([]);
   const [recording, setRecording] = useState(false);
   const [samples, setSamples] = useState<{time: string; values: Record<string, string>}[]>([]);
+  const keyInput = useRef<HTMLInputElement>(null);
+  const menu = useContextMenu([status, keys, recording, samples.length > 0], e => setEventError(String(e)));
+  const toggleRecording = () => {if (!recording) setSamples([]); setRecording(!recording);};
+  const discover = () => robot.call("ALMemory", "getDataListName").then(v => {
+    if (!Array.isArray(v) || v.some(x => typeof x !== "string")) throw new Error("Unexpected memory key list"); setAvailable(v.sort());
+  }).catch(e => setEventError(String(e)));
+  const exportSamples = async () => {try {
+    const path = await save({defaultPath: "memory.json", filters: [{name: "Memory recording", extensions: ["json"]}]});
+    if (path) await writeTextFile(path, JSON.stringify(samples, null, 2));
+  } catch (e) {setEventError(String(e));}};
   useEffect(() => {
     setValues({});
     if (!status || !keys.length) return;
@@ -302,7 +329,13 @@ export function MemoryPanel() {
   useEffect(() => {if (samples.length >= 10000) setRecording(false);}, [samples.length]);
   if (!native) return message("The memory watcher needs the desktop app.");
   return (
-    <div className="panel-column">
+    <div className="panel-column" tabIndex={0} {...menu.trigger(() => [
+      {label: "Watch key…", run: () => keyInput.current?.focus()},
+      {label: "Discover memory keys", run: discover, disabled: !status, reason: "Connect to a robot first."},
+      {label: recording ? "Stop recording memory" : "Record memory", run: toggleRecording, disabled: !status || !keys.length, reason: !status ? "Connect to a robot first." : "Watch a memory key first."},
+      {label: "Export samples…", run: exportSamples, disabled: !samples.length, reason: "Record memory samples first."},
+    ])}>
+      {menu.element}
       <form
         className="panel-toolbar"
         onSubmit={(e) => {
@@ -313,6 +346,7 @@ export function MemoryPanel() {
         }}
       >
         <input
+          ref={keyInput}
           list="memory-keys"
           aria-label="Memory key"
           placeholder="ALMemory key, e.g. Device/SubDeviceList/HeadYaw/Position/Sensor/Value"
@@ -326,16 +360,11 @@ export function MemoryPanel() {
       </form>
       <datalist id="memory-keys">{available.map(k => <option key={k} value={k} />)}</datalist>
       <div className="panel-toolbar">
-        <button disabled={!status} onClick={() => void robot.call("ALMemory", "getDataListName").then(v => {
-          if (!Array.isArray(v) || v.some(x => typeof x !== "string")) throw new Error("Unexpected memory key list"); setAvailable(v.sort());
-        }).catch(e => setEventError(String(e)))}>Discover memory keys</button>
+        <button disabled={!status} onClick={() => void discover()}>Discover memory keys</button>
         <label>Period (ms)<input aria-label="Memory sampling period" type="number" min={100} max={60000} step={100} value={period} disabled={recording}
           onChange={e => setPeriod(Math.max(100, Math.min(60000, Number(e.target.value) || 100)))} /></label>
-        <button disabled={!status || !keys.length} onClick={() => {if (!recording) setSamples([]); setRecording(!recording);}}>{recording ? "Stop recording memory" : "Record memory"}</button>
-        <button disabled={!samples.length} onClick={async () => {try {
-          const path = await save({defaultPath: "memory.json", filters: [{name: "Memory recording", extensions: ["json"]}]});
-          if (path) await writeTextFile(path, JSON.stringify(samples, null, 2));
-        } catch (e) {setEventError(String(e));}}}>Export {samples.length} samples</button>
+        <button disabled={!status || !keys.length} onClick={toggleRecording}>{recording ? "Stop recording memory" : "Record memory"}</button>
+        <button disabled={!samples.length} onClick={() => void exportSamples()}>Export {samples.length} samples</button>
       </div>
       {eventError && !status?.virtual && <p className="error" role="alert">{eventError}</p>}
       {status?.virtual && (
@@ -402,7 +431,11 @@ export function MemoryPanel() {
         <table className="memory-table" aria-label="Watched memory keys">
           <tbody>
             {keys.map((k) => (
-              <tr key={k}>
+              <tr key={k} tabIndex={0} {...menu.trigger(() => [
+                {label: "Stop watching", run: () => setKeys(keys.filter(x => x !== k))},
+                {label: "Copy key", run: () => navigator.clipboard.writeText(k)},
+                {label: "Copy value", run: () => navigator.clipboard.writeText(values[k] ?? ""), disabled: values[k] === undefined, reason: "Waiting for a value."},
+              ])}>
                 <td>{k}</td>
                 <td>{values[k] ?? "…"}</td>
                 <td>
@@ -472,6 +505,8 @@ export function RecordingPanel() {
     !!joints.length &&
     !!angles &&
     joints.every((j) => Number.isFinite(angles[descriptor!.joints.indexOf(j)]));
+  const menu = useContextMenu([status, scope, ws.history?.revision, recording, storing, ready, chains, view.frame], e => setError(String(e)));
+  const toggleRecording = () => setRecordingScope(recording ? undefined : scope);
   const run = (p: Promise<unknown>) => {
     setError(undefined);
     return p.catch((e) => {
@@ -561,7 +596,12 @@ export function RecordingPanel() {
         : robot.call("ALMotion", "setAngles", name, v, 0.2),
     );
   return (
-    <div className="panel-column">
+    <div className="panel-column" tabIndex={0} {...menu.trigger(() => [
+      {label: `Store at frame ${view.frame}`, run: () => storeAt(view.frame), disabled: !ready || recording || storing, reason: !target ? "Open a timeline in an editable project." : recording || storing ? "Wait for recording to finish." : "Select joints and wait for their positions."},
+      {label: recording ? "Stop recording" : "Record motion", run: toggleRecording, disabled: !recording && (!ready || storing), reason: !target ? "Open a timeline in an editable project." : "Select joints and wait for their positions."},
+      ...[0, 1].map(value => ({label: `Stiffness ${value ? "on" : "off"} for selected chains`, run: () => run(robot.call("ALMotion", "setStiffnesses", chains, value)), disabled: !chains.length, reason: "Select a chain first."})),
+    ])}>
+      {menu.element}
       <div
         className="panel-toolbar recording-toolbar"
         role="toolbar"
@@ -621,7 +661,7 @@ export function RecordingPanel() {
         <button
           disabled={!recording && (!ready || storing)}
           aria-pressed={recording}
-          onClick={() => setRecordingScope(recording ? undefined : scope)}
+          onClick={toggleRecording}
         >
           {recording ? <Square size={13} /> : <Circle size={13} />}
           {recording ? "Stop" : "Record"}

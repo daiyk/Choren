@@ -207,3 +207,31 @@ fn box_library_files_import_and_export() {
     assert!(library::import_cbl(&escape, &dir).is_err());
     assert!(!dir.exists() && !dir.parent().unwrap().join("x").exists());
 }
+
+#[test]
+fn tree_keeps_empty_folders_raw_paths_and_root_identity() {
+    let root = tmp("tree-raw");
+    let a = root.join("a/Same");
+    let b = root.join("b/Same");
+    library::create(&a, "Same").unwrap();
+    library::create(&b, "Same").unwrap();
+    std::fs::create_dir_all(a.join("Empty%20folder")).unwrap();
+    std::fs::create_dir_all(a.join("HiddenSymlinkTarget")).unwrap();
+    std::fs::write(a.join("xalinfo"), "<Folder><Node name=\"Empty%20folder\"/></Folder>").unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&b, a.join("Linked")).unwrap();
+    let tree = library::tree(&a, "user", true).unwrap();
+    assert_eq!(tree.children[0].name, "Empty folder");
+    assert_eq!(tree.children[0].relative_path, "Empty%20folder");
+    assert!(tree.children[0].children.is_empty());
+    assert_eq!(tree.children[0].kind, "folder");
+    assert!(!tree.children.iter().any(|n| n.name == "Linked"));
+    assert!(tree.writable);
+    let other = library::tree(&b, "user", true).unwrap();
+    assert_eq!(tree.name, other.name);
+    assert_ne!(tree.path, other.path);
+    assert!(!library::tree(&a, "install", true).unwrap().writable);
+    assert!(!library::tree(&a, "user", false).unwrap().writable);
+    assert!(library::tree(&root.join("missing"), "user", true).is_err());
+    std::fs::remove_dir_all(root).unwrap();
+}

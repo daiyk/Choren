@@ -174,6 +174,8 @@ async function backend(page: Page, format: "pml" | "crg" = "pml", timelineRoot =
             if (command.startsWith("plugin:") || command === "authorize_project_root") return;
             if (command === "project_open") return { session: 7, ...doc() };
             if (command === "project_edit") {
+              if ((window as any).holdMenuEdit)
+                await new Promise<void>(resolve => { (window as any).releaseMenuEdit = resolve; });
               for (const c of args.commands) if (c.type === "setAttributes" && c.values.value !== undefined) paramValues[c.node] = c.values.value;
               return changed(args.label);
             }
@@ -183,15 +185,33 @@ async function backend(page: Page, format: "pml" | "crg" = "pml", timelineRoot =
             }
             if (command === "project_copy")
               return '<Box id="1" name="Greeter" />';
-            if (command === "library_index")
-              return structuredClone(libraryEntries);
+            if (command === "library_tree") {
+              if ((window as any).failLibraryGrant && args.userDirs?.length) throw new Error("This location has not been granted to the app.");
+              if ((window as any).libraryTrees && !(window as any).failLibraryGrant) return structuredClone((window as any).libraryTrees);
+              const roots = [{path: "/bundled", name: "Choren", source: "choren", writable: false, children: [] as any[]},
+                ...(args.userDirs ?? []).map((path: string) => ({path, name: path.split("/").at(-1), source: "user", writable: true, children: [] as any[]}))];
+              for (const entry of libraryEntries) {
+                const root = roots.find(r => r.source === entry.source && (r.source !== "user" || entry.path.startsWith(`${r.path}/`))) ?? roots[0];
+                let children = root.children;
+                const parts = entry.source === "user" ? entry.path.slice(root.path.length + 1).split("/").slice(0, -2) : entry.category.split("/").map(p => p.trim()).filter(p => p && p !== "Choren");
+                let relativePath = "";
+                for (const part of parts) {
+                  relativePath += `${relativePath ? "/" : ""}${part}`;
+                  let folder = children.find((c: any) => c.name === part);
+                  if (!folder) {folder = {name: part, relativePath, kind: "folder", boxFile: null, children: []}; children.push(folder);}
+                  children = folder.children;
+                }
+                children.push({name: entry.name, relativePath: `${relativePath ? relativePath + "/" : ""}${entry.name}`, kind: "box", boxFile: entry.path, hasScript: true, children: []});
+              }
+              return roots;
+            }
             if (command === "library_box")
               return box(90, 0, "Say", 0, { script: "say()" });
             if (command === "library_create" || command === "library_import_cbl" || command === "library_export_cbl") {
               if ((window as any).failLibraryArchive) throw new Error("folder not empty");
               return;
             }
-            if (command === "library_copy" || command === "library_manage") return;
+            if (command === "library_copy" || command === "library_manage") {if ((window as any).failLibraryManage) throw new Error("An item with that name already exists."); return;}
             if (command === "library_add_box") {
               if ((window as any).failLibrarySave)
                 throw new Error("Library is read only");
@@ -294,11 +314,11 @@ test("convert to box wraps the selected boxes", async ({ page }) => {
   await backend(page);
   await page.locator(".react-flow__node-box", { hasText: "Greeter" }).click();
   await page.locator(".react-flow__node-box", { hasText: "Waver" }).click({ modifiers: ["Shift"] });
-  await palette(page, "Convert to box");
+  await palette(page, "Group into box");
   await page.getByRole("textbox", { name: "Name of the new box" }).fill("Greeting");
-  await page.getByRole("button", { name: "Convert", exact: true }).click();
+  await page.getByRole("button", { name: "Group", exact: true }).click();
   await expect.poll(() => lastEdit(page)).toMatchObject({
-    label: "Convert selection to box",
+    label: "Group into box",
     commands: [{ type: "convertToBox", diagram: 10, name: "Greeting" }],
   });
   expect([...(await lastEdit(page)).commands[0].boxes].sort()).toEqual([20, 30]);
@@ -331,7 +351,7 @@ test("diagram toolbar copies, pastes and opens the box editor", async ({
 test("libraries group shared category paths into collapsible folders", async ({ page }) => {
   await backend(page);
   await page.getByRole("toolbar", { name: "Diagram editing" }).getByRole("button", { name: "Libraries", exact: true }).click();
-  const root = page.locator("details.library-category").filter({ has: page.locator(":scope > summary", { hasText: /^Choren$/ }) });
+  const root = page.locator("details.library-root").filter({ has: page.locator(":scope > summary", { hasText: /^Choren/ }) });
   await expect(root).toHaveCount(1);
   await expect(root.locator(":scope > details > summary")).toHaveText(["Speech", "Animation", "LEDs"]);
   const nod = page.getByRole("button", { name: "Nod", exact: true });
@@ -348,8 +368,7 @@ test("libraries group shared category paths into collapsible folders", async ({ 
   await expect(root.locator(":scope > details > summary")).toHaveText(["LEDs"]);
   await search.fill("");
   await expect(page.getByRole("button", { name: "Eyes Color", exact: true })).toBeHidden();
-  await page.locator("summary", { hasText: /^My boxes$/ }).click();
-  await expect(page.getByRole("button", { name: "Custom", exact: true })).toBeVisible();
+  await expect(root.locator(":scope > summary")).toContainText("Read-only");
 });
 
 test("bundled libraries work without an install; user libraries create, save and delete boxes", async ({
@@ -368,7 +387,7 @@ test("bundled libraries work without an install; user libraries create, save and
   await expect(
     page.getByRole("button", { name: "Delete from library" }),
   ).toHaveCount(0);
-  expect((await calls(page, "library_index"))[0]).toEqual({
+  expect((await calls(page, "library_tree"))[0]).toEqual({
     shareDir: null,
     userDirs: [],
   });
@@ -802,6 +821,150 @@ test("diagram context menu supports Cut, zoom presets and dialog-box creation", 
   await expect.poll(() => lastEdit(page)).toMatchObject({commands: [{type: "newBox", kind: "Dialog", dialogFile: "../greet/greet.dlg"}]});
 });
 
+for (const style of ["choren", "classic"] as const) {
+  const setupMenus = async (page: Page) => {
+    await page.addInitScript(style => localStorage.setItem("choren.graph-style", JSON.stringify(style)), style);
+    await backend(page);
+  };
+  const box = (page: Page, id: number) => page.locator(`.react-flow__node-box[data-id="${id}"]`);
+  const wirePoint = (page: Page) => page.locator(".react-flow__edge-path").first().evaluate((path: SVGPathElement) => {
+    const point = path.getPointAtLength(path.getTotalLength() / 2).matrixTransform(path.getScreenCTM()!);
+    return { x: point.x, y: point.y };
+  });
+  test(`context menus target connections and keep box groups (${style})`, async ({ page }) => {
+    await setupMenus(page);
+    const menu = page.getByRole("menu", { name: "Diagram actions" });
+    await box(page, 1).click();
+    await box(page, 2).click({ modifiers: ["Shift"] });
+    await box(page, 1).click({ button: "right" });
+    await expect(menu.getByText("2 boxes selected")).toBeVisible();
+    await expect(menu.getByRole("menuitem")).toHaveText(["Group into box…", "Cut", "Copy", "Delete selection (2 boxes)", "Fit selection"]);
+    await menu.getByRole("menuitem", { name: "Group into box…" }).click();
+    await page.getByRole("textbox", { name: "Name of the new box" }).fill("Pair");
+    await page.getByRole("button", { name: "Group", exact: true }).click();
+    await expect.poll(() => lastEdit(page)).toMatchObject({
+      commands: [{ type: "convertToBox", boxes: [20, 30], name: "Pair" }],
+    });
+
+    // A different box replaces the prior group.
+    await box(page, 1).click();
+    await box(page, 2).click({ modifiers: ["Shift"] });
+    await box(page, 3).click({ button: "right" });
+    await expect(menu.getByRole("menuitem", { name: "Delete box", exact: true })).toBeVisible();
+    await menu.getByRole("menuitem", { name: "Copy", exact: true }).click();
+    await expect.poll(() => calls(page, "project_copy")).toMatchObject([{ boxes: [40] }]);
+
+    // Right-clicking the wire must never delete the selected boxes.
+    await box(page, 1).click();
+    await box(page, 2).click({ modifiers: ["Shift"] });
+    const point = await wirePoint(page);
+    await page.mouse.click(point.x, point.y, { button: "right" });
+    await expect(menu.getByRole("menuitem")).toHaveText(["Delete connection"]);
+    await expect(page.locator(".react-flow__node-box.selected")).toHaveCount(0);
+    await menu.getByRole("menuitem", { name: "Delete connection" }).click();
+    await expect.poll(() => lastEdit(page)).toMatchObject({ commands: [{ type: "remove", nodes: [11] }] });
+    await expect(menu).toHaveCount(0);
+  });
+
+  test(`context menus isolate canvas actions, clamp size and dismiss (${style})`, async ({ page }, info) => {
+    await setupMenus(page);
+    await box(page, 1).click();
+    const menu = page.getByRole("menu", { name: "Diagram actions" });
+    await page.evaluate(() => document.documentElement.style.setProperty("--text-scale", "1.5"));
+    const bounds = (await page.getByTestId("graph").boundingBox())!;
+    await page.mouse.click(bounds.x + bounds.width - 65, bounds.y + bounds.height - 65, { button: "right" });
+    await expect(menu.getByRole("menuitem")).toHaveText(["Create a new box…", "Paste", "Fit graph"]);
+    await expect(menu.getByRole("menuitem", { name: "Paste", exact: true })).toBeDisabled();
+    await expect(menu.getByRole("menuitem", { name: "Paste", exact: true })).toHaveAttribute("title", "Copy boxes first.");
+    await expect(page.locator(".react-flow__node-box.selected")).toHaveCount(1);
+    const rect = (await menu.boundingBox())!;
+    expect(rect.x).toBeGreaterThanOrEqual(bounds.x);
+    expect(rect.y).toBeGreaterThanOrEqual(bounds.y);
+    expect(rect.x + rect.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+    expect(rect.y + rect.height).toBeLessThanOrEqual(bounds.y + bounds.height);
+    await page.screenshot({ path: info.outputPath(`context-menu-${style}.png`) });
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+
+    await box(page, 1).click({ button: "right" });
+    await menu.getByRole("menuitem", { name: "Copy", exact: true }).click();
+    await expect.poll(() => calls(page, "project_copy")).toHaveLength(1);
+    await page.mouse.click(bounds.x + bounds.width - 65, bounds.y + bounds.height - 65, { button: "right" });
+    await expect(menu.getByRole("menuitem", { name: "Paste", exact: true })).toBeEnabled();
+    await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+    await expect(menu).toHaveCount(0);
+    await box(page, 1).click({ button: "right" });
+    await box(page, 3).click();
+    await expect(menu).toHaveCount(0);
+  });
+
+  test(`context menus support keyboard targets and mixed deletion (${style})`, async ({ page }) => {
+    await setupMenus(page);
+    const menu = page.getByRole("menu", { name: "Diagram actions" });
+    await box(page, 1).focus();
+    await page.keyboard.press("Shift+F10");
+    await expect(menu.getByRole("menuitem", { name: "Open Greeter" })).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(menu.getByRole("menuitem", { name: "Properties", exact: true })).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(menu.getByRole("menuitem", { name: "Delete box", exact: true })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(box(page, 1)).toBeFocused();
+    const edge = page.locator(".react-flow__edge").first();
+    await edge.focus();
+    await page.keyboard.press("Shift+F10");
+    await expect(menu.getByRole("menuitem", { name: "Delete connection" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(edge).toBeFocused();
+
+    await box(page, 1).click();
+    const point = await wirePoint(page);
+    await page.keyboard.down("Shift");
+    await page.mouse.click(point.x, point.y);
+    await page.keyboard.up("Shift");
+    await box(page, 1).click({ button: "right" });
+    await expect(menu.getByText("1 box, 1 connection selected")).toBeVisible();
+    await menu.getByRole("menuitem", { name: /Delete selection/ }).click();
+    await expect.poll(() => lastEdit(page)).toMatchObject({ commands: [{ type: "remove", nodes: [11, 20] }] });
+  });
+
+  test(`context menus support selection outlines and close on document changes (${style})`, async ({ page }) => {
+    await setupMenus(page);
+    const first = (await box(page, 1).boundingBox())!;
+    const second = (await box(page, 2).boundingBox())!;
+    // Marquee selection creates React Flow's separate selection surface.
+    await page.mouse.move(first.x - 8, first.y - 8);
+    await page.mouse.down();
+    await page.mouse.move(second.x + second.width + 8, second.y + second.height + 8, { steps: 8 });
+    await page.mouse.up();
+    const outline = page.locator(".react-flow__nodesselection-rect");
+    await expect(outline).toBeVisible();
+    await outline.focus();
+    await page.keyboard.press("Shift+F10");
+    const menu = page.getByRole("menu", { name: "Diagram actions" });
+    await expect(menu.getByRole("menuitem", { name: "Group into box…" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(outline).toBeFocused();
+    await outline.click({ button: "right", position: { x: 5, y: 5 } });
+    await expect(menu.getByText(/2 boxes/).first()).toBeVisible();
+    await menu.getByRole("menuitem", { name: "Copy", exact: true }).click();
+    await expect.poll(() => calls(page, "project_copy")).toMatchObject([{ boxes: [20, 30] }]);
+
+    // A pending edit can finish while another menu is open: discard its stale target.
+    await page.evaluate(() => { (window as any).holdMenuEdit = true; });
+    await page.keyboard.press("Escape");
+    const graph = (await page.getByTestId("graph").boundingBox())!;
+    await page.mouse.click(graph.x + graph.width - 65, graph.y + graph.height - 65);
+    await box(page, 1).click({ button: "right" });
+    await menu.getByRole("menuitem", { name: "Cut", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => typeof (window as any).releaseMenuEdit)).toBe("function");
+    await box(page, 3).click({ button: "right" });
+    await expect(menu).toBeVisible();
+    await page.evaluate(() => (window as any).releaseMenuEdit());
+    await expect(menu).toHaveCount(0);
+  });
+}
+
 test("timeline range, acquisition and layer mute emit undoable edits", async ({page}) => {
   await backend(page, "pml", true);
   await page.getByRole("checkbox", {name: "Mute layer"}).click();
@@ -1042,7 +1205,7 @@ test("backend wiring: import and export CBL registers and refreshes the chosen l
   await modal.getByRole("button", { name: "Import library…" }).click();
   await expect.poll(() => calls(page, "library_import_cbl")).toEqual([{ path: "/p/Legacy.cbl", dir: "/p/out/Legacy" }]);
   await expect(page.getByLabel("User library")).toHaveValue("/p/out/Legacy");
-  await expect.poll(() => calls(page, "library_index")).toContainEqual(expect.objectContaining({ userDirs: ["/p/out/Legacy"] }));
+  await expect.poll(() => calls(page, "library_tree")).toContainEqual(expect.objectContaining({ userDirs: ["/p/out/Legacy"] }));
   await page.getByRole("button", { name: "Save as .cbl…", exact: true }).click();
   await expect.poll(() => calls(page, "library_export_cbl")).toEqual([{ library: "/p/out/Legacy", path: "/p/out.cbl" }]);
   await page.evaluate(() => (window as any).failLibraryArchive = true);
@@ -1076,4 +1239,96 @@ test("backend wiring: structured manifest edits preserve untouched properties an
   const saved = (await calls(page, "project_set_manifest"))[0].manifest;
   expect(saved.behaviors[0]).toEqual({ path: "behavior_1", nature: "solitary", userRequestable: true, names: [["en_US", "Greeting"]], descriptions: [], tags: [["en_US", "hello"]], triggerSentences: [["en_US", "Start greeting"]], loadingResponses: [], conditions: [["launchTrigger", "a < c"]], permissions: ["canStandUp"] });
   expect(saved.requirements).toEqual({ naoqi: [["2.8.1", ""]], robots: [{ model: "NAO", minHeadVersion: "6", maxHeadVersion: "", minBodyVersion: "6", maxBodyVersion: "6" }] });
+});
+
+test("library context targets retain raw paths and separate matching roots", async ({page}) => {
+  await backend(page);
+  await page.evaluate(() => {
+    (window as any).libraryTrees = ["/one/Same", "/two/Same"].map(path => ({path, name: "Same", source: "user", writable: true, children: [
+      {name: "Empty folder", relativePath: "Empty%20folder", kind: "folder", boxFile: null, children: []},
+      {name: "Script box", relativePath: "Script%20box", kind: "box", boxFile: `${path}/Script%20box/box.xar`, hasScript: true, children: []},
+    ]}));
+  });
+  await palette(page, "Show Libraries");
+  await page.locator(".library-actions").click({button: "right", position: {x: 4, y: 4}});
+  await page.getByRole("menuitem", {name: "Refresh", exact: true}).click();
+  const roots = page.locator(".library-root");
+  await expect(roots).toHaveCount(2);
+  const second = roots.nth(1);
+  await second.locator(":scope > summary").click({button: "right"});
+  const context = page.getByRole("menu", {name: "Context actions"});
+  await expect(context.getByRole("menuitem", {name: "Paste", exact: true})).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await second.getByText("Empty folder", {exact: true}).click({button: "right"});
+  await context.getByRole("menuitem", {name: "Rename…", exact: true}).click();
+  const rename = page.getByRole("dialog", {name: "Rename library item"});
+  await rename.getByLabel("Library item name").fill("Renamed");
+  await page.evaluate(() => (window as any).failLibraryManage = true);
+  await rename.getByRole("button", {name: "Rename", exact: true}).click();
+  await expect(rename.getByRole("alert")).toContainText("already exists");
+  await page.evaluate(() => (window as any).failLibraryManage = false);
+  await rename.getByRole("button", {name: "Rename", exact: true}).click();
+  await expect.poll(() => calls(page, "library_manage")).toContainEqual({library: "/two/Same", folder: "Empty%20folder", action: "rename", name: "Renamed"});
+  await second.getByText("Empty folder", {exact: true}).click({button: "right"});
+  page.once("dialog", d => d.dismiss());
+  await context.getByRole("menuitem", {name: "Delete folder…"}).click();
+  expect(await calls(page, "library_remove")).toEqual([]);
+  await roots.first().getByRole("button", {name: "Script box", exact: true}).click({button: "right"});
+  await expect(context.getByRole("menuitem", {name: "View script"})).toBeVisible();
+  await context.getByRole("menuitem", {name: "Copy", exact: true}).click();
+  await second.getByText("Empty folder", {exact: true}).click({button: "right"});
+  await context.getByRole("menuitem", {name: "Paste", exact: true}).click();
+  const paste = page.getByRole("dialog", {name: "Paste into library"});
+  await paste.getByLabel("Library item name").fill("Copy");
+  await paste.getByRole("button", {name: "Paste", exact: true}).click();
+  await expect.poll(() => calls(page, "library_copy")).toEqual([{source: "/one/Same/Script%20box", library: "/two/Same", folder: "Empty%20folder", name: "Copy"}]);
+  expect(await calls(page, "project_edit")).toEqual([]);
+});
+
+test("library menus isolate background and read-only items, clamp and restore keyboard focus", async ({page}) => {
+  await backend(page);
+  await palette(page, "Show Libraries");
+  await page.getByRole("textbox", {name: "Search libraries"}).fill("Say");
+  const box = page.getByRole("button", {name: "Say", exact: true});
+  await box.focus();
+  await page.keyboard.press("Shift+F10");
+  const context = page.getByRole("menu", {name: "Context actions"});
+  await expect(context.getByRole("menuitem", {name: "Delete…"})).toHaveCount(0);
+  await expect(context.getByRole("menuitem", {name: "Rename…"})).toHaveCount(0);
+  await page.keyboard.press("End");
+  await expect(context.getByRole("menuitem", {name: "Copy", exact: true})).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(box).toBeFocused();
+  await page.getByRole("textbox", {name: "Search libraries"}).click({button: "right"});
+  await expect(context).toHaveCount(0);
+  await page.locator(".library-actions").click({button: "right", position: {x: 4, y: 4}});
+  await expect(context.getByRole("menuitem", {name: "New library…"})).toBeVisible();
+  await expect(context.getByRole("menuitem", {name: "Insert into diagram"})).toHaveCount(0);
+  await page.evaluate(() => document.documentElement.style.setProperty("--text-scale", "1.5"));
+  const bounds = await context.boundingBox();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(900);
+  await page.keyboard.press("Escape");
+  await box.click({button: "right"});
+  await page.setViewportSize({width: 1100, height: 780});
+  await expect(context).toHaveCount(0);
+});
+
+test("expired library grants leave bundled content available and reject write targets", async ({page}) => {
+  await backend(page);
+  await palette(page, "Show Libraries");
+  await page.getByRole("button", {name: "New library…", exact: true}).click();
+  await page.getByRole("textbox", {name: "Library name"}).fill("Temporary");
+  await page.getByRole("button", {name: "Choose location…"}).click();
+  await expect(page.getByLabel("User library")).toHaveValue("/p/out/Temporary");
+  await page.evaluate(() => (window as any).failLibraryGrant = true);
+  await page.locator(".library-actions").click({button: "right", position: {x: 4, y: 4}});
+  await page.getByRole("menuitem", {name: "Refresh", exact: true}).click();
+  await expect(page.locator(".panel-message.error[role=alert]")).toContainText("Reopen the folder to grant access");
+  await expect(page.locator(".library-root")).toHaveCount(1);
+  await page.getByRole("textbox", {name: "Search libraries"}).fill("Say");
+  await expect(page.getByRole("button", {name: "Say", exact: true})).toBeVisible();
+  await page.locator(".library-root > summary").click({button: "right"});
+  await expect(page.getByRole("menuitem", {name: "Paste", exact: true})).toHaveCount(0);
+  await expect(page.getByRole("menuitem", {name: "New folder…", exact: true})).toHaveCount(0);
 });
