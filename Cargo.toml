@@ -4,7 +4,7 @@ members = ["crates/*", "app/src-tauri"]
 
 [workspace.package]
 edition = "2024"
-version = "0.1.0"
+version = "0.2.0"
 license = "BSD-3-Clause"
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

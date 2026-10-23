@@ -1,0 +1,30 @@
+# Changelog
+
+Release notes are extracted from the section matching the version in
+`app/src-tauri/tauri.conf.json`. Keep entries newest first, using
+`## [version] - YYYY-MM-DD` headings. Dates below follow the tagged commits;
+this file does not indicate whether a GitHub release has been published.
+
+## [0.2.0] - 2026-10-23
+
+- Add target-specific right-click menus for diagram connections, boxes, selections,
+  Project, Outline, Libraries, dock tabs, editors, and robot panels.
+- Support keyboard menu access, arrow-key navigation, focus restoration, and menu
+  placement beyond small dock boundaries.
+- Display empty library folders and keep library roots and filesystem paths distinct.
+- Preserve selected groups and project undo behavior, and reject outdated targets
+  after document or connection changes.
+- Improve timeline and motion-curve targeting, including occupied-frame guards and
+  protection against unintended dragging with the right mouse button.
+- Update release automation for Node 24 and updater metadata generation.
+- Populate new draft release descriptions from this changelog, retaining the
+  installation instructions. Reject missing or empty release entries before building.
+
+## [0.1.0] - 2026-10-20
+
+- Introduce the desktop studio with project browsing, visual behavior diagrams,
+  timeline and motion editing, script editing, and box libraries.
+- Include virtual robot support, robot inspection tools, and an independent SFTP
+  file browser.
+- Provide macOS release builds with optional signing and updater bundles.
+- Distribute the project under BSD-3-Clause and include third-party license notices.
