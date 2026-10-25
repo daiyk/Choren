@@ -5,6 +5,19 @@ Release notes are extracted from the section matching the version in
 `## [version] - YYYY-MM-DD` headings. Dates below follow the tagged commits;
 this file does not indicate whether a GitHub release has been published.
 
+## [0.3.0] - 2026-10-25
+
+- Prepare Windows x64 builds: an NSIS installer (`tauri.windows.conf.json`) and LF line
+  endings in every checkout, so Windows builds bundle the same files as macOS.
+- Build the Windows installer in the release workflow, next to the macOS builds, with
+  installation notes for both platforms in the draft release.
+- Fix the bundled Windows Python runtime missing `threading`, a console window opening
+  for each behavior run on Windows, and license-notice generation failing on Windows
+  systems whose default encoding is not UTF-8.
+- Add an About Choren window with the app version, copyright and license, opened from
+  Help on Windows and the Choren menu on macOS. It replaces the macOS system panel,
+  which showed version 0.1.0.
+
 ## [0.2.0] - 2026-10-23
 
 - Add target-specific right-click menus for diagram connections, boxes, selections,

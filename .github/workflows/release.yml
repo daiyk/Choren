@@ -1,7 +1,8 @@
-# Builds macOS installers and attaches them to a draft GitHub release, with signed update bundles
-# and the latest.json that installed apps check (once published). With the Apple secrets the app is
-# Developer ID signed and notarized; without them it is ad-hoc signed, and users allow it once in
-# System Settings. Without the updater key, no update bundles are made.
+# Builds macOS and Windows installers and attaches them to a draft GitHub release, with signed update
+# bundles and the latest.json that installed apps check (once published). With the Apple secrets the
+# Mac app is Developer ID signed and notarized; without them it is ad-hoc signed, and users allow it
+# once in System Settings. The Windows installer is not code signed. Without the updater key, no
+# update bundles are made.
 # Push a tag matching app/src-tauri/tauri.conf.json's version (for example, v0.2.0), or run it by hand.
 # Setup: the optional secrets it reads are the secrets.* entries below.
 name: Release
@@ -13,6 +14,21 @@ on:
 
 permissions:
   contents: write
+
+env:
+  # Below the changelog notes in the release description; the first job to upload creates the release.
+  INSTALLATION: |
+    ## Installation
+
+    **macOS:** download the .dmg for your Mac (aarch64 = Apple silicon, x64 = Intel).
+
+    If macOS says Choren "cannot be opened" or "is damaged", the build is not notarized:
+    open it once, then choose **Open Anyway** in System Settings → Privacy & Security, or run
+    `xattr -dr com.apple.quarantine /Applications/Choren.app`.
+
+    **Windows:** download `Choren_<version>_x64-setup.exe` and run it. It installs for your user
+    account, without administrator rights. The installer is not code signed, so if Windows says
+    "Windows protected your PC", choose **More info → Run anyway**.
 
 jobs:
   macos:
@@ -83,14 +99,78 @@ jobs:
           releaseBody: |
             ${{ steps.changelog.outputs.notes }}
 
-            ## Installation
-
-            Download the .dmg for your Mac (aarch64 = Apple silicon, x64 = Intel).
-
-            If macOS says Choren "cannot be opened" or "is damaged", the build is not notarized:
-            open it once, then choose **Open Anyway** in System Settings → Privacy & Security, or run
-            `xattr -dr com.apple.quarantine /Applications/Choren.app`.
+            ${{ env.INSTALLATION }}
           releaseDraft: true
           includeUpdaterJson: ${{ env.UPDATER }}
           # `app` produces the signed .app.tar.gz the updater installs.
           args: --target ${{ matrix.target }} --bundles app,dmg ${{ env.UPDATER_ARGS }}
+
+  windows:
+    environment: Tauri Development
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Tag matches the app version
+        if: github.ref_type == 'tag'
+        run: test "${GITHUB_REF_NAME#v}" = "$(node -p "require('./app/src-tauri/tauri.conf.json').version")"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Extract release notes
+        id: changelog
+        run: node scripts/release-notes.mjs
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          key: x86_64-pc-windows-msvc
+
+      - run: npm ci
+        working-directory: app
+
+      # tauri.windows.conf.json's build command runs Git's sh from cmd, where `bash` may be WSL's.
+      # Not Git's usr\bin: its link.exe would hide MSVC's linker.
+      - name: Git sh on PATH
+        run: echo 'C:\Program Files\Git\bin' >> "$GITHUB_PATH"
+
+      # Passes on only the secrets that are set, so a missing one never reaches Tauri as an empty value.
+      # No updater key means no update bundles.
+      - name: Signing setup
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          for v in TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD; do
+            if [ -n "${!v}" ]; then printf '%s<<__END__\n%s\n__END__\n' "$v" "${!v}" >> "$GITHUB_ENV"; fi
+          done
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then echo UPDATER=true >> "$GITHUB_ENV"; else
+            echo UPDATER=false >> "$GITHUB_ENV"
+            echo "UPDATER_ARGS=--config '{\"bundle\":{\"createUpdaterArtifacts\":false}}'" >> "$GITHUB_ENV"
+          fi
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: app
+          tagName: v__VERSION__
+          releaseName: Choren __VERSION__
+          releaseBody: |
+            ${{ steps.changelog.outputs.notes }}
+
+            ${{ env.INSTALLATION }}
+          releaseDraft: true
+          includeUpdaterJson: ${{ env.UPDATER }}
+          # The NSIS bundle (tauri.windows.conf.json) is also the update the updater installs.
+          args: --target x86_64-pc-windows-msvc ${{ env.UPDATER_ARGS }}

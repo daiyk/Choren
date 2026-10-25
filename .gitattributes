@@ -1,0 +1,2 @@
+# LF everywhere, so Windows checkouts (core.autocrlf) build and bundle the same files as macOS.
+* text=auto eol=lf

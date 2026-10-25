@@ -5,7 +5,7 @@ import { chooseLibrary } from "../platform";
 import { setShareDir, useShareDir } from "../icons";
 
 /** The app icon (icons/icon.svg) without its margin. */
-function AppMark() {
+export function AppMark() {
   return (
     <svg className="setup-mark" viewBox="100 100 824 824" aria-hidden="true">
       <defs>

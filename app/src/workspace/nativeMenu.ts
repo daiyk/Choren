@@ -24,14 +24,10 @@ export async function installNativeMenu(
       await Submenu.new({
         text: "Choren",
         items: [
-          await PredefinedMenuItem.new({
-            item: {
-              About: {
-                name: "Choren",
-                version: "0.1.0",
-                comments: "Studio compatible with Choregraphe projects. Not affiliated with Aldebaran or SoftBank Robotics.",
-              },
-            },
+          // Not the predefined About: the shared dialog looks the same on every platform.
+          await MenuItem.new({
+            text: "About Choren",
+            action: () => execute("about"),
           }),
           await MenuItem.new({
             text: "Settings…",
@@ -55,7 +51,7 @@ export async function installNativeMenu(
           (c) =>
             c.group === group &&
             (c.enabled || !c.id.startsWith("panel.")) &&
-            !(mac && c.id === "quit"), // macOS: Quit lives in the app menu
+            !(mac && (c.id === "quit" || c.id === "about")), // macOS: these live in the app menu
         )
         .map(async (command) => {
           const item = await MenuItem.new({

@@ -117,6 +117,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { robot, startRobotEvents, useRobot } from "./robot/store";
 import { ProjectProperties } from "./workspace/ProjectProperties";
 import { WelcomeSetup } from "./workspace/WelcomeSetup";
+import { AboutDialog } from "./workspace/AboutDialog";
 import { Connection } from "./robot/Connection";
 import { VirtualMovementSpeed } from "./robot/panels";
 import { ImportContent, type ImportKind } from "./workspace/ImportContent";
@@ -258,6 +259,7 @@ export default function App() {
     | "connection"
     | "import"
     | "welcome"
+    | "about"
     | undefined
   >(() => (native && !getShareDir() && readPreference(WELCOME_KEY) !== "done" ? "welcome" : undefined));
   const [importKind, setImportKind] = useState<ImportKind>("behavior");
@@ -1347,6 +1349,13 @@ export default function App() {
         );
       },
     },
+    {
+      id: "about",
+      title: "About Choren",
+      group: "Help",
+      enabled: true,
+      run: () => setModal("about"),
+    },
   ];
   commandRef.current = commands;
   const commandSignature = commands
@@ -1847,6 +1856,7 @@ export default function App() {
             </div>
           </Modal>
         )}
+        {modal === "about" && <AboutDialog onClose={() => setModal(undefined)} />}
         {modal === "welcome" && (
           <WelcomeSetup
             onClose={() => {

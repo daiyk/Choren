@@ -136,7 +136,7 @@ python3 -m unittest discover -s ../python/tests   # Python box host
 npx playwright install chromium webkit
 npm run test:ui
 npm run tauri build -- --bundles app  # macOS
-npm run tauri build                 # run on Windows for Windows installers
+npm run tauri build                 # on Windows, from Git Bash (needs its sh): NSIS installer
 ```
 
 `npm run dev` is a browser preview with a bundled example. OS file dialogs and filesystem
