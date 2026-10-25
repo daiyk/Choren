@@ -5,7 +5,7 @@ Release notes are extracted from the section matching the version in
 `## [version] - YYYY-MM-DD` headings. Dates below follow the tagged commits;
 this file does not indicate whether a GitHub release has been published.
 
-## Unreleased
+## [0.3.0] - 2026-10-25
 
 - Prepare Windows x64 builds: an NSIS installer (`tauri.windows.conf.json`) and LF line
   endings in every checkout, so Windows builds bundle the same files as macOS.

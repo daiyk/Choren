@@ -1,6 +1,6 @@
 [package]
 name = "choren"
-version = "0.2.0"
+version = "0.3.0"
 description = "Choren studio for Choregraphe-compatible projects and virtual robots"
 authors = ["yudai"]
 edition = "2024"
