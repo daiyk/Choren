@@ -16,7 +16,7 @@ LICENSE_FILE = re.compile(r"^(licen[cs]e|copying|notice|copyright|unlicense)([-_
 
 def license_texts(folder):
     files = sorted(f for f in Path(folder).iterdir() if f.is_file() and LICENSE_FILE.match(f.name))
-    return "\n\n".join(f.read_text(errors="replace").strip() for f in files)
+    return "\n\n".join(f.read_text(encoding="utf-8", errors="replace").strip() for f in files)
 
 
 def rust_packages(triple):
@@ -46,12 +46,12 @@ def rust_packages(triple):
 
 def npm_packages():
     app = ROOT / "app"
-    lock = json.loads((app / "package-lock.json").read_text())
+    lock = json.loads((app / "package-lock.json").read_text(encoding="utf-8"))
     for path, p in lock["packages"].items():
         folder = app / path
         if not path or p.get("dev") or not folder.is_dir():
             continue
-        info = json.loads((folder / "package.json").read_text())
+        info = json.loads((folder / "package.json").read_text(encoding="utf-8"))
         repo = info.get("repository") or ""
         if isinstance(repo, dict):
             repo = repo.get("url", "")
@@ -96,7 +96,7 @@ def main():
     )
     notices += section("Rust crates", rust_packages(triple))
     notices += section("JavaScript packages (npm)", npm_packages())
-    (OUT / "THIRD_PARTY_NOTICES.txt").write_text(notices + "\n")
+    (OUT / "THIRD_PARTY_NOTICES.txt").write_text(notices + "\n", encoding="utf-8")
     print(f"third-party-notices: wrote {OUT / 'THIRD_PARTY_NOTICES.txt'} ({len(notices) // 1024} KiB)")
 
 

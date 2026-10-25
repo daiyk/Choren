@@ -1154,15 +1154,17 @@ impl Runtime {
         let start_id = int(&doc, start, "id");
         let cfg = self.python.lock().unwrap().clone();
         // -B: no __pycache__ writes, which would break the signature of a packaged app.
-        let mut child = Command::new(&cfg.exe)
-            .args(["-B", "-E", "-s", "-u", "-X", "utf8", "-m", "choren_host"])
+        let mut cmd = Command::new(&cfg.exe);
+        cmd.args(["-B", "-E", "-s", "-u", "-X", "utf8", "-m", "choren_host"])
             .current_dir(&cfg.dir)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()
-            .map_err(|e| format!("Cannot start the Python box host ({}): {e}", cfg.exe))?;
+            .kill_on_drop(true);
+        // CREATE_NO_WINDOW: python.exe is a console program, so the GUI app would open a console for it.
+        #[cfg(windows)]
+        cmd.creation_flags(0x0800_0000);
+        let mut child = cmd.spawn().map_err(|e| format!("Cannot start the Python box host ({}): {e}", cfg.exe))?;
         let (tx, mut rx) = mpsc::unbounded_channel();
         let inst = Arc::new(Instance {
             name: name.into(),

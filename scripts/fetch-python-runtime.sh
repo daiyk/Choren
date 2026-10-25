@@ -45,9 +45,12 @@ if [[ "$(cat "$stamp" 2>/dev/null)" != "$name" ]]; then
   (
     cd "$tmp/python"
     shopt -s nullglob
-    rm -rf include share libs Scripts tcl lib/pkgconfig lib/libpython3.12.dylib lib/*tcl* lib/*tk* lib/itcl* lib/thread* \
-      DLLs/_tkinter* DLLs/tcl* DLLs/tk* lib/python3.12/lib-dynload/_{tkinter,dbm,crypt}* \
+    rm -rf include share libs Scripts tcl DLLs/_tkinter* DLLs/tcl* DLLs/tk* \
       bin/idle* bin/pip* bin/pydoc* bin/2to3* bin/*-config bin/python bin/python3
+    # Windows paths ignore case, so there these would match the standard library in Lib/ (threading.py).
+    if [[ "$triple" != *-windows-* ]]; then
+      rm -rf lib/pkgconfig lib/libpython3.12.dylib lib/*tcl* lib/*tk* lib/itcl* lib/thread* lib/python3.12/lib-dynload/_{tkinter,dbm,crypt}*
+    fi
     for lib in lib/python3.12 Lib; do
       for p in test idlelib tkinter turtledemo turtle.py ensurepip lib2to3 pydoc_data venv 'config-3.12*' 'site-packages/pip*'; do
         rm -rf "${lib:?}"/$p
