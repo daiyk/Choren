@@ -2,7 +2,7 @@
 # Downloads the relocatable CPython that the packaged app runs box scripts with into
 # app/src-tauri/python-runtime/ (bundled as a resource, see tauri.conf.json).
 # Usage: scripts/fetch-python-runtime.sh [target-triple]   (default: $TAURI_ENV_TARGET_TRIPLE, else this machine)
-# Needs curl, tar and shasum; on macOS also codesign and security when APPLE_SIGNING_IDENTITY is set.
+# Needs curl, tar and sha256sum or shasum; on macOS also codesign and security when APPLE_SIGNING_IDENTITY is set.
 set -euo pipefail
 
 # python-build-standalone "install_only_stripped" builds.
@@ -35,7 +35,9 @@ if [[ "$(cat "$stamp" 2>/dev/null)" != "$name" ]]; then
   tmp="$(mktemp -d "$(dirname "$dest")/.python-runtime-XXXXXX")"
   trap 'rm -rf "$tmp"' EXIT
   curl -fsSL -o "$tmp/python.tar.gz" "https://github.com/astral-sh/python-build-standalone/releases/download/$release/${name//+/%2B}"
-  echo "$sha  $tmp/python.tar.gz" | shasum -a 256 -c - >/dev/null
+  # macOS has shasum; Git's sh on Windows may lack it (Perl's core_perl is off its PATH) but has sha256sum.
+  if command -v sha256sum >/dev/null; then check=(sha256sum -c -); else check=(shasum -a 256 -c -); fi
+  echo "$sha  $tmp/python.tar.gz" | "${check[@]}" >/dev/null
   tar -xzf "$tmp/python.tar.gz" -C "$tmp"
 
   # Not needed by the box host (standard library only) or by box scripts: Tk, tests, pip, headers.

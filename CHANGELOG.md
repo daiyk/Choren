@@ -9,6 +9,8 @@ this file does not indicate whether a GitHub release has been published.
 
 - Prepare Windows x64 builds: an NSIS installer (`tauri.windows.conf.json`) and LF line
   endings in every checkout, so Windows builds bundle the same files as macOS.
+- Build the Windows installer in the release workflow, next to the macOS builds, with
+  installation notes for both platforms in the draft release.
 - Fix the bundled Windows Python runtime missing `threading`, a console window opening
   for each behavior run on Windows, and license-notice generation failing on Windows
   systems whose default encoding is not UTF-8.
