@@ -23,7 +23,7 @@ def rust_packages(triple):
     cmd = ["cargo", "metadata", "--format-version", "1", "--locked", "--manifest-path", str(ROOT / "Cargo.toml")]
     if triple:
         cmd += ["--filter-platform", triple]
-    meta = json.loads(subprocess.run(cmd, check=True, capture_output=True, text=True).stdout)
+    meta = json.loads(subprocess.run(cmd, check=True, capture_output=True, encoding="utf-8").stdout)
     packages = {p["id"]: p for p in meta["packages"]}
     nodes = {n["id"]: n for n in meta["resolve"]["nodes"]}
     # Everything the app links: normal dependencies from the app crate down (not build/dev ones).
