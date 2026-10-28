@@ -474,7 +474,7 @@ dependencies = [
 
 [[package]]
 name = "choren"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "choren-core",
  "choren-naoqi",
@@ -496,7 +496,7 @@ dependencies = [
 
 [[package]]
 name = "choren-core"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "choren-robot",
  "flate2",
@@ -506,7 +506,7 @@ dependencies = [
 
 [[package]]
 name = "choren-naoqi"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "choren-core",
  "choren-qi",
@@ -517,14 +517,14 @@ dependencies = [
 
 [[package]]
 name = "choren-qi"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "tokio",
 ]
 
 [[package]]
 name = "choren-robot"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "serde",
  "serde_json",
