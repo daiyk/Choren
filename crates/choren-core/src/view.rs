@@ -214,6 +214,9 @@ pub struct ProjectDocument {
     pub files: Vec<ProjectFile>,
     pub metadata: BTreeMap<String, String>,
     pub diagnostics: Vec<Diagnostic>,
+    /// Choren's own project data (`<name>.chorenproj`), e.g. `treeOrder`.
+    #[serde(skip_serializing_if = "serde_json::Map::is_empty")]
+    pub choren: serde_json::Map<String, serde_json::Value>,
 }
 
 pub fn project(p: &Project) -> ProjectDocument {
@@ -226,6 +229,7 @@ pub fn project(p: &Project) -> ProjectDocument {
         files: p.files.clone(),
         metadata: p.metadata.clone(),
         diagnostics: p.diagnostics.clone(),
+        choren: p.choren.clone(),
     }
 }
 

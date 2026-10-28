@@ -179,6 +179,8 @@ export interface ProjectDocument {
   files: ProjectFile[];
   metadata: Record<string, string>;
   diagnostics: Diagnostic[];
+  /** Choren's own project data, saved beside the PML as `<name>.chorenproj`. */
+  choren?: { treeOrder?: Record<string, string[]> } & Record<string, unknown>;
 }
 
 // Enum values as stored in XAR attributes (index = stored number).

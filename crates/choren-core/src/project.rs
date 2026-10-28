@@ -42,6 +42,10 @@ pub struct Project {
     pub structure_dirty: bool,
     /// Non-behavior files of a `.crg` archive (relative path → bytes), kept for save-as-folder.
     pub archive: BTreeMap<String, Vec<u8>>,
+    /// Choren's own project data, kept beside the PML as `<name>.chorenproj` (JSON): what the
+    /// PML has no place for, such as the Project tree order (`treeOrder`). Staged like any
+    /// project file, so changes are written on save and undo with the project history.
+    pub choren: serde_json::Map<String, serde_json::Value>,
 }
 
 /// Robot languages (`share/choregraphe/robotlanguages`: ISO code → ASR embedded code). Topic
@@ -106,7 +110,7 @@ impl Project {
         };
         let bytes = std::fs::read(path).map_err(|e| format!("Cannot read {source}: {e}"))?;
         let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-        let mut p = Project { source: source.clone(), format, name: stem, behaviors: vec![], files: vec![], metadata: BTreeMap::new(), diagnostics: vec![], pml: None, manifest: None, pending: BTreeMap::new(), deleted: BTreeSet::new(), structure_dirty: false, archive: BTreeMap::new() };
+        let mut p = Project { source: source.clone(), format, name: stem, behaviors: vec![], files: vec![], metadata: BTreeMap::new(), diagnostics: vec![], pml: None, manifest: None, pending: BTreeMap::new(), deleted: BTreeSet::new(), structure_dirty: false, archive: BTreeMap::new(), choren: serde_json::Map::new() };
         match format {
             Format::Xar => {
                 let file = path.file_name().unwrap().to_string_lossy().to_string();
@@ -197,7 +201,57 @@ impl Project {
             }
         }
         self.pml = Some(pml);
+        if let Some(file) = self.choren_file() {
+            if let Ok(text) = std::fs::read_to_string(dir.join(&file)) {
+                match serde_json::from_str::<serde_json::Value>(&text) {
+                    Ok(serde_json::Value::Object(mut data)) => {
+                        data.remove("format");
+                        data.remove("version");
+                        self.choren = data;
+                    }
+                    _ => self.diagnostics.push(Diagnostic::warning(&file, "Choren project data is unreadable; it is replaced when the tree order next changes.")),
+                }
+            }
+        }
         Ok(())
+    }
+
+    /// `<name>.chorenproj` beside the `.pml` (none for `.crg` and `.xar`).
+    pub fn choren_file(&self) -> Option<String> {
+        (self.format == Format::Pml).then(|| format!("{}.chorenproj", Path::new(&self.source).file_stem().unwrap_or_default().to_string_lossy()))
+    }
+
+    /// Sets (or with `None` removes) a key of the Choren project data and stages its file.
+    pub fn set_choren(&mut self, key: &str, value: Option<serde_json::Value>) -> Result<(), String> {
+        let file = self.choren_file().ok_or("Choren project data needs a .pml project")?;
+        if matches!(key, "format" | "version") { return Err(format!("{key} is reserved")); }
+        match value {
+            Some(value) => { self.choren.insert(key.into(), value); }
+            None => { self.choren.remove(key); }
+        }
+        let mut data = serde_json::Map::new();
+        data.insert("format".into(), "chorenproj".into());
+        data.insert("version".into(), 1.into());
+        data.extend(self.choren.clone());
+        self.stage(&file, Some((serde_json::to_string_pretty(&serde_json::Value::Object(data)).unwrap() + "\n").into_bytes()));
+        Ok(())
+    }
+
+    /// Keeps the Project tree order (`treeOrder`: folder → child names) through a move: a renamed
+    /// entry keeps its place, and the order inside a moved folder moves with it.
+    fn retarget_tree_order(&mut self, from: &str, to: &str) -> Result<(), String> {
+        let Some(serde_json::Value::Object(order)) = self.choren.get("treeOrder").cloned() else { return Ok(()) };
+        let parent = |p: &str| p.rsplit_once('/').map_or(String::new(), |(d, _)| d.to_string());
+        let name = |p: &str| p.rsplit('/').next().unwrap_or(p).to_string();
+        let mut next: serde_json::Map<String, serde_json::Value> = order.into_iter()
+            .map(|(dir, names)| (if under(&dir, from) { format!("{to}{}", &dir[from.len()..]) } else { dir }, names))
+            .collect();
+        if parent(from) == parent(to) {
+            if let Some(serde_json::Value::Array(names)) = next.get_mut(&parent(from)) {
+                for n in names.iter_mut().filter(|n| n.as_str() == Some(name(from).as_str())) { *n = name(to).into(); }
+            }
+        }
+        self.set_choren("treeOrder", Some(next.into()))
     }
 
     /// Folder that project-relative paths resolve against (none for read-only `.crg`).
@@ -769,6 +823,7 @@ impl Project {
         }
         for f in moved.iter().filter(|f| f.kind == "resource") { self.retarget_resource(&f.path, &map(&f.path)); }
         for f in &mut self.files { if under(&f.path, &from) { f.path = map(&f.path); } }
+        self.retarget_tree_order(&from, &to)?;
         self.structure_dirty = true;
         Ok(())
     }
@@ -824,29 +879,6 @@ impl Project {
         }
         self.list_behavior(&folder, &xar, text.as_bytes(), content.as_deref())?;
         Ok(self.behaviors.last().unwrap().id.clone())
-    }
-
-    /// Moves the Project tree entry `path` (a file or folder) before or `after` its sibling
-    /// `target`. Each PML section, the manifest contents and the file list reorder only the
-    /// entries under their folder, in the positions those already hold.
-    pub fn reorder(&mut self, path: &str, target: &str, after: bool) -> Result<(), String> {
-        let parent = |p: &str| p.rsplit_once('/').map_or(String::new(), |(d, _)| d.to_string());
-        let dir = parent(path);
-        if path == target || dir != parent(target) { return Err("Drop it next to an entry in the same folder.".into()); }
-        // Siblings in the order the Project tree shows them.
-        let mut files: Vec<&ProjectFile> = self.files.iter().collect();
-        files.sort_by_key(|f| kind_rank(f.kind));
-        let mut order: Vec<String> = vec![];
-        for f in files {
-            if let Some(c) = child_of(&dir, &f.path) { if !order.contains(&c) { order.push(c); } }
-        }
-        let (moving, at) = (child_of(&dir, path), child_of(&dir, target));
-        let (Some(moving), Some(at)) = (moving.filter(|m| order.contains(m)), at.filter(|a| order.contains(a))) else { return Err("Nothing in the project is there.".into()) };
-        order.retain(|c| *c != moving);
-        let i = order.iter().position(|c| *c == at).unwrap() + after as usize;
-        order.insert(i, moving);
-        self.apply_order(|p| child_of(&dir, p).and_then(|c| order.iter().position(|o| *o == c)));
-        Ok(())
     }
 
     /// Moves the behavior `id` before or `after` the behavior `target` in the project's behavior
@@ -1195,17 +1227,6 @@ fn collect_files(root: &Path, rel: &str, out: &mut Vec<String>) {
 /// `path` is `prefix` or inside the folder `prefix`.
 fn under(path: &str, prefix: &str) -> bool {
     path.strip_prefix(prefix).is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
-}
-
-/// The name of the child of folder `dir` (`""`: the project root) that `path` is or lies in.
-fn child_of(dir: &str, path: &str) -> Option<String> {
-    let rest = if dir.is_empty() { path } else { path.strip_prefix(dir)?.strip_prefix('/')? };
-    rest.split('/').next().filter(|c| !c.is_empty()).map(str::to_string)
-}
-
-/// The Project tree groups files by kind in PML section order, as reopening the project lists them.
-pub fn kind_rank(kind: &str) -> usize {
-    ["project", "behavior", "resource", "dialog", "topic", "translation", "manifest"].iter().position(|k| *k == kind).unwrap_or(6)
 }
 
 /// Puts the items with a key in key order (stable) within the positions they hold.

@@ -634,6 +634,12 @@ kbd {
 .tree-row:focus {
   background: var(--selection);
 }
+/* The selected Project tree or Outline row: what its menu and drag act on. */
+.panel-scroll [data-selected] {
+  background: var(--selection);
+  box-shadow: inset 2px 0 0 var(--accent);
+  border-radius: 3px;
+}
 .tree-row small {
   margin-left: auto;
   color: var(--muted);
@@ -642,9 +648,9 @@ kbd {
   margin-left: 10px;
 }
 /* Drag and drop in the Project tree and Outline: a line before/after a row, or a folder highlight. */
-[data-drop="before"] { box-shadow: inset 0 2px 0 var(--accent); }
-[data-drop="after"] { box-shadow: inset 0 -2px 0 var(--accent); }
-[data-drop="into"], .panel-scroll[data-drop="root"] { background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 4px; }
+.panel-scroll [data-drop="before"] { box-shadow: inset 0 2px 0 var(--accent); }
+.panel-scroll [data-drop="after"] { box-shadow: inset 0 -2px 0 var(--accent); }
+.panel-scroll [data-drop="into"], .panel-scroll[data-drop="root"] { background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 4px; }
 .file-tree [draggable="true"], .outline-owner summary[draggable="true"] { cursor: grab; }
 .outline-child {
   margin-left: 12px;

@@ -7,11 +7,9 @@ export interface FileTree {
   path: string;
   file?: ProjectFile;
   children: FileTree[];
-  /** Lowest kind rank inside: entries reorder only among siblings of the same group. */
-  group: number;
 }
 
-/** PML section order (choren-core `kind_rank`): the tree lists files as reopening the project does. */
+/** PML section order: by default the tree lists files as reopening the project does. */
 const KINDS = ["project", "behavior", "resource", "dialog", "topic", "translation", "manifest"];
 export const kindRank = (kind: string) => {
   const i = KINDS.indexOf(kind);
@@ -24,26 +22,49 @@ export const nameOf = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 /** The folder holding a behavior's files (its `.xar` alone at the project root). */
 export const behaviorFolder = (source: string) => source.includes("/") ? parentOf(source) : source;
 
-export function fileTree(files: ProjectFile[]): FileTree[] {
+/**
+ * Puts `path` before or `after` its sibling `target` in the Project tree, starting from the order
+ * `siblings` shows now. The order is project data: saved in `<name>.chorenproj` beside the PML
+ * (which has no place for it), written on save and undoable.
+ */
+export function moveInTree(ws: WorkspaceContextValue, siblings: string[], path: string, target: string, after: boolean) {
+  const project = ws.state.project;
+  const session = project?.session;
+  if (!project || !session) return;
+  const moving = nameOf(path);
+  const order = siblings.filter(name => name !== moving);
+  order.splice(order.indexOf(nameOf(target)) + (after ? 1 : 0), 0, moving);
+  void ws.applyChange(() => authoring.setChoren(session, "treeOrder", {...project.choren?.treeOrder, [parentOf(path)]: order}, "Reorder project tree"));
+}
+
+export function fileTree(files: ProjectFile[], order?: Record<string, string[]>): FileTree[] {
   const root: FileTree[] = [];
   const sorted = files.map((file, i) => ({file, i})).sort((a, b) => kindRank(a.file.kind) - kindRank(b.file.kind) || a.i - b.i);
   for (const {file} of sorted) {
     let children = root;
     let path = "";
-    const rank = kindRank(file.kind);
     const parts = file.path.split("/");
     parts.forEach((name, i) => {
       path += `${path ? "/" : ""}${name}`;
       let entry = children.find((child) => child.name === name);
       if (!entry) {
-        entry = { name, path, children: [], group: rank };
+        entry = { name, path, children: [] };
         children.push(entry);
       }
-      entry.group = Math.min(entry.group, rank);
       if (i === parts.length - 1) entry.file = file;
       children = entry.children;
     });
   }
+  // Arranged entries first, in their order; the rest keep the default order after them.
+  const arrange = (entries: FileTree[], dir: string) => {
+    const names = order?.[dir];
+    if (names) {
+      const rank = (entry: FileTree) => { const i = names.indexOf(entry.name); return i < 0 ? names.length : i; };
+      entries.sort((a, b) => rank(a) - rank(b));
+    }
+    for (const entry of entries) arrange(entry.children, entry.path);
+  };
+  arrange(root, "");
   return root;
 }
 

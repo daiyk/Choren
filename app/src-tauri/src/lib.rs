@@ -50,6 +50,7 @@ pub fn run() {
             project::project_move_path,
             project::project_duplicate_behavior,
             project::project_reorder,
+            project::project_set_choren,
             project::project_manifest,
             project::project_set_manifest,
             project::project_rename,

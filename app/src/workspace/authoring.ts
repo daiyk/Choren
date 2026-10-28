@@ -178,9 +178,12 @@ export const authoring = {
     withSession(session, await invoke<Change>("project_rename", { session, name })),
   duplicateBehavior: async (session: number, behavior: string) =>
     withSession(session, await invoke<Change>("project_duplicate_behavior", { session, behavior })),
-  /** Moves a Project tree entry, or a behavior, before or after `target`. */
-  reorder: async (session: number, item: { path: string } | { behavior: string }, target: string, after: boolean) =>
-    withSession(session, await invoke<Change>("project_reorder", { session, path: null, behavior: null, ...item, target, after })),
+  /** Sets (or with `null` removes) a key of Choren's own project data (`<name>.chorenproj`). */
+  setChoren: async (session: number, key: string, value: unknown, label: string) =>
+    withSession(session, await invoke<Change>("project_set_choren", { session, key, value: value ?? null, label })),
+  /** Moves a behavior before or after the behavior `target` (PML and manifest order). */
+  reorder: async (session: number, behavior: string, target: string, after: boolean) =>
+    withSession(session, await invoke<Change>("project_reorder", { session, behavior, target, after })),
   /** The files that removing a behavior or folder and its files would delete. */
   removalFiles: (session: number, behavior?: string, folder?: string) =>
     invoke<string[]>("project_removal_files", { session, behavior: behavior ?? null, folder: folder ?? null }),

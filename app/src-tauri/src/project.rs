@@ -257,15 +257,21 @@ pub fn project_duplicate_behavior(sessions: State<Sessions>, session: u32, behav
     })
 }
 
-/// Moves a Project tree entry (`path`) or a behavior next to `target`.
+/// Sets (or with `None` removes) a key of Choren's own project data (`<name>.chorenproj`),
+/// as one undo step named `label`; written on save.
 #[tauri::command]
-pub fn project_reorder(sessions: State<Sessions>, session: u32, path: Option<String>, behavior: Option<String>, target: String, after: bool) -> Result<Changed, String> {
+pub fn project_set_choren(sessions: State<Sessions>, session: u32, key: String, value: Option<serde_json::Value>, label: String) -> Result<Changed, String> {
     with(&sessions, session, |p, h| {
-        edit::change_project(p, h, "Reorder", |p| match (&behavior, &path) {
-            (Some(id), _) => p.reorder_behavior(id, &target, after),
-            (None, Some(path)) => p.reorder(path, &target, after),
-            (None, None) => Err("Select what to move.".into()),
-        })?;
+        edit::change_project(p, h, &label, |p| p.set_choren(&key, value))?;
+        Ok(changed(p, h, vec![]))
+    })
+}
+
+/// Moves a behavior next to `target` in the project's behavior order.
+#[tauri::command]
+pub fn project_reorder(sessions: State<Sessions>, session: u32, behavior: String, target: String, after: bool) -> Result<Changed, String> {
+    with(&sessions, session, |p, h| {
+        edit::change_project(p, h, "Reorder", |p| p.reorder_behavior(&behavior, &target, after))?;
         Ok(changed(p, h, vec![]))
     })
 }
