@@ -4,6 +4,7 @@ import { Layouts } from "./workspace/Layouts";
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useReducer,
   useRef,
@@ -184,7 +185,19 @@ function defaultLayout(api: DockviewApi) {
 function PanelTab(props: IDockviewPanelHeaderProps) {
   const ws = useWorkspace();
   const menu = useContextMenu([props.api.id, ws.state.activeBehavior, ws.state.project], message => ws.notify(message, "error"));
-  return <><DockviewDefaultTab {...props} tabIndex={0} {...menu.trigger(() => [
+  // The React default tab names every close button "Close tab"; name it after the panel, as
+  // dockview's own tab does, so each one is distinct ("Close Inspector").
+  const tab = useRef<HTMLDivElement>(null);
+  const [title, setTitle] = useState(props.api.title);
+  useEffect(() => {
+    const listener = props.api.onDidTitleChange(event => setTitle(event.title));
+    return () => listener.dispose();
+  }, [props.api]);
+  useLayoutEffect(() => {
+    tab.current?.querySelector(".dv-default-tab-action")?.setAttribute("aria-label", `Close ${title ?? props.api.id}`);
+  });
+  // React 19 passes `ref` through to the tab's root element.
+  return <><DockviewDefaultTab {...props} {...{ref: tab}} tabIndex={0} {...menu.trigger(() => [
     {label: props.api.isMaximized() ? "Restore panel" : "Maximize panel", run: () => props.api.isMaximized() ? props.api.exitMaximized() : props.api.maximize()},
     {label: "Move or resize…", run: () => ws.managePanel(props.api.id)},
     {label: "Close panel", run: () => props.api.close()},
@@ -458,7 +471,9 @@ export default function App() {
             ? 248
             : undefined,
       initialHeight: !peer && definition.region === "bottom" ? 230 : undefined,
-      minimumHeight: 100,
+      // The timeline's toolbars take ~120 px; keep the ruler and a layer row visible when the
+      // window shrinks to its 640 px minimum.
+      minimumHeight: id === "timeline" ? 190 : 100,
       minimumWidth: 180,
       // Documents share the center group with graphs, which use the "always" renderer.
       renderer: definition.region === "center" ? "always" : undefined,
