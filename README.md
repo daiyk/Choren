@@ -22,8 +22,8 @@ built-in virtual NAO 6, and connect to real robots.
 ![Python](https://img.shields.io/badge/Python-3.8%2B-3776ab?logo=python&logoColor=white)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows-lightgrey?logo=apple)
 
-![Lines of code](https://img.shields.io/badge/lines%20of%20code-38.8k-0ea5e9)
-![Tests](https://img.shields.io/badge/tests-270%2B-16a34a)
+![Lines of code](https://img.shields.io/badge/lines%20of%20code-41.8k-0ea5e9)
+![Tests](https://img.shields.io/badge/tests-330%2B-16a34a)
 ![NAOqi services](https://img.shields.io/badge/NAOqi%202.8%20services-108-f97316)
 ![API methods](https://img.shields.io/badge/API%20methods%20described-4%2C569-ef4444)
 
@@ -37,10 +37,10 @@ built-in virtual NAO 6, and connect to real robots.
 
 | | |
 |---|---|
-| 🦀 **Rust** | ~18.9k lines across four crates and the native shell |
-| ⚛️ **TypeScript / React** | ~17.1k lines of studio UI |
+| 🦀 **Rust** | ~19.7k lines across four crates and the native shell |
+| ⚛️ **TypeScript / React** | ~19.2k lines of studio UI and UI tests |
 | 🐍 **Python** | Box-script host and `naoqi` / `qi` compatibility modules |
-| ✅ **Tests** | 125 Rust · 104 Playwright UI · 38 Vitest · Python host tests |
+| ✅ **Tests** | 133 Rust · 150 Playwright UI · 42 Vitest · Python host tests |
 | 🤖 **Virtual robot** | NAO 6 over the libqi wire protocol, with a schema of 108 NAOqi 2.8 services |
 | 📦 **Box library** | 11 original Choren boxes in 7 categories, plus your own Choregraphe libraries |
 
@@ -50,11 +50,18 @@ built-in virtual NAO 6, and connect to real robots.
   imported coordinates, port semantics and link geometry so saved files stay compatible.
 - **Visual authoring.** Dockable workspace with flow diagrams, timelines, an inspector, an
   outline, undo/redo backed by the project history, and a CodeMirror Python script editor.
+- **Project organization.** Rename, duplicate and reorder behaviors and folders from the
+  Project and Outline panels, drag a behavior into another folder (its paths and dialog
+  references follow), and delete with or without the files on disk. File changes are
+  applied on save and can be undone.
+- **Imports.** Bring in behaviors (`.xar`, `.crg`), files and whole folders. Imported
+  `behavior.xar`, `.dlg` and `.top` files become behaviors, dialogs and topics.
 - **Virtual NAO 6.** Run behaviors without hardware. Box scripts run in a real Python host
   against a simulated NAOqi that speaks libqi (QiMessaging), the protocol real robots use.
 - **Real robots.** Discover and connect to NAO over the network (port 9561 by default),
   browse robot files over SFTP, watch memory keys and filter robot logs.
-- **Light and dark themes**, scalable text, native menus and signed auto-updates on macOS.
+- **Light and dark themes**, scalable text, native menus, and macOS and Windows builds with
+  in-app update checks.
 
 <p align="center">
   <img src="assets/screenshots/choren-studio-dark.png" alt="Choren studio in dark mode" width="720">
@@ -100,8 +107,8 @@ development notes.
 
 Maintain [CHANGELOG.md](CHANGELOG.md) as changes are made. Before each release:
 
-1. Move the release's completed notes from `Unreleased` into a section headed
-   `## [version] - YYYY-MM-DD`, using the version from `app/src-tauri/tauri.conf.json`.
+1. Bump the version (app, workspace crates and lockfiles) and add the release's notes as a
+   section headed `## [version] - YYYY-MM-DD`, matching `app/src-tauri/tauri.conf.json`.
 2. Preview the extracted notes with `node scripts/release-notes.mjs` from the repo root.
 3. Commit the version and changelog updates, then push the matching `v<version>` tag.
 

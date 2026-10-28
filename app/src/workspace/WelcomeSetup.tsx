@@ -1,26 +1,28 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Boxes, Check, FolderOpen, Image, PersonStanding, Rotate3d } from "lucide-react";
 import { Modal } from "./Modal";
 import { chooseLibrary } from "../platform";
 import { setShareDir, useShareDir } from "../icons";
 
-/** The app icon (icons/icon.svg) without its margin. */
-export function AppMark() {
+/** The app icon (icons/icon.svg) without its margin. Gradient ids are per instance: a shared
+ * id resolves to the first copy, which may sit in a hidden panel. */
+export function AppMark({ className = "setup-mark" }: { className?: string }) {
+  const id = useId();
   return (
-    <svg className="setup-mark" viewBox="100 100 824 824" aria-hidden="true">
+    <svg className={className} viewBox="100 100 824 824" aria-hidden="true">
       <defs>
-        <linearGradient id="setup-mark-bg" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={`${id}bg`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#1f2633" />
           <stop offset="1" stopColor="#121720" />
         </linearGradient>
-        <linearGradient id="setup-mark-wire" x1="0" y1="0" x2="1" y2="1">
+        <linearGradient id={`${id}wire`} x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor="#79acff" />
           <stop offset="1" stopColor="#3979db" />
         </linearGradient>
       </defs>
-      <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#setup-mark-bg)" />
+      <rect x="100" y="100" width="824" height="824" rx="185" fill={`url(#${id}bg)`} />
       <g transform="translate(18 0)">
-        <path d="M653.4 370.6 A200 200 0 1 0 653.4 653.4" fill="none" stroke="url(#setup-mark-wire)" strokeWidth="72" strokeLinecap="round" />
+        <path d="M653.4 370.6 A200 200 0 1 0 653.4 653.4" fill="none" stroke={`url(#${id}wire)`} strokeWidth="72" strokeLinecap="round" />
         <circle cx="653.4" cy="370.6" r="56" fill="#fff" />
         <circle cx="653.4" cy="653.4" r="56" fill="#fff" />
       </g>

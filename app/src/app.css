@@ -534,11 +534,6 @@ kbd {
 .project-avatar {
   width: 34px;
   height: 34px;
-  display: grid;
-  place-items: center;
-  border-radius: 7px;
-  color: var(--accent);
-  background: var(--selection);
   flex-shrink: 0;
 }
 .project-info {
@@ -1146,15 +1141,14 @@ dd {
   padding: 50px clamp(24px, 5vw, 80px);
   background: var(--canvas);
 }
+.app-menu-mark {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
 .welcome-mark {
   width: 62px;
   height: 62px;
-  display: grid;
-  place-items: center;
-  background: var(--selection);
-  color: var(--accent);
-  border: 1px solid var(--border);
-  border-radius: 16px;
   margin-bottom: 30px;
 }
 .eyebrow {

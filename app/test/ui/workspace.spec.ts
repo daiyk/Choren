@@ -324,13 +324,18 @@ test("themes and compact layouts do not overlap or overflow the window", async (
   await page
     .getByRole("combobox", { name: "Appearance", exact: true })
     .selectOption("dark");
-  await expectTidyLayout(page, "dialog[open]");
-  await page.getByRole("button", { name: "Close dialog" }).click();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  if (process.env.CAPTURE_UI && browserName === "chromium")
+  // Capture before the layout audit: its 150% text pass can leave dockview's tab overflow
+  // chevron behind once the text shrinks back.
+  if (process.env.CAPTURE_UI && browserName === "chromium") {
+    await page.getByRole("button", { name: "Close dialog" }).click();
     await page.screenshot({
       path: "../assets/screenshots/choren-studio-dark.png",
     });
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+  }
+  await expectTidyLayout(page, "dialog[open]");
+  await page.getByRole("button", { name: "Close dialog" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   for (const viewport of [
     { width: 1024, height: 640 },
     { width: 1280, height: 720 },

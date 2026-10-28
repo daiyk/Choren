@@ -39,6 +39,7 @@ import { native, PROJECT_FILE_MIME } from "../platform";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { Modal } from "./Modal";
 import { ImportMenu } from "./ImportContent";
+import { AppMark } from "./WelcomeSetup";
 import {
   emptySelection,
   graphId,
@@ -81,9 +82,7 @@ export function Welcome() {
   const ws = useWorkspace();
   return (
     <div className="welcome">
-      <div className="welcome-mark">
-        <Workflow size={32} />
-      </div>
+      <AppMark className="welcome-mark" />
       <span className="eyebrow">CHOREN STUDIO</span>
       <h1>
         A clearer view of
@@ -283,9 +282,7 @@ function ProjectPanel() {
   return (
     <div className="panel-column" tabIndex={0} {...menu.trigger(actions)}>{menu.element}
       <div className="project-heading">
-        <div className="project-avatar">
-          <Workflow size={18} />
-        </div>
+        <AppMark className="project-avatar" />
         <div className="project-info">
           <strong title={project.name} onDoubleClick={() => ws.execute("rename-project")}>{project.name}</strong>
           <small>
