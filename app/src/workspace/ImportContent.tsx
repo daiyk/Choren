@@ -76,6 +76,7 @@ export function ImportContent({ kind, initialDestination = "", onClose }: { kind
     setBusy(true);
     setError("");
     setConflicts([]);
+    const before = ws.state.project?.behaviors.map(b => b.id) ?? [];
     const result = await ws.applyChange(async () => {
       try {
         const r = kind === "behavior"
@@ -90,13 +91,15 @@ export function ImportContent({ kind, initialDestination = "", onClose }: { kind
     });
     setBusy(false);
     if (!result) return;
-      onClose();
-      ws.showPanel("project");
-      if (kind === "behavior") {
-        const added = result.document.behaviors.find((b) => b.source === `${destination.trim()}/behavior.xar`);
-        if (added) ws.openBehavior(added.id);
-      }
-    ws.notify(`${kind === "behavior" ? "Behavior" : kind === "folder" ? "Folder" : "Files"} imported. Save the project to write the imported content.`);
+    onClose();
+    ws.showPanel("project");
+    // Folder and file imports list any behavior.xar they bring as a behavior.
+    const added = kind === "behavior"
+      ? result.document.behaviors.filter((b) => b.source === `${destination.trim()}/behavior.xar`)
+      : result.document.behaviors.filter((b) => !before.includes(b.id));
+    if (added[0]) ws.openBehavior(added[0].id);
+    const behaviors = kind !== "behavior" && added.length ? ` with ${added.length === 1 ? "1 behavior" : `${added.length} behaviors`}` : "";
+    ws.notify(`${kind === "behavior" ? "Behavior" : kind === "folder" ? "Folder" : "Files"} imported${behaviors}. Save the project to write the imported content.`);
   };
   return <>
   <Modal title={title} onClose={() => !busy && onClose()}>
@@ -115,6 +118,7 @@ export function ImportContent({ kind, initialDestination = "", onClose }: { kind
           ? "XAR imports the behavior definition; add any external resources with Import files or Import folder. CRG also includes its packaged resources. Behavior imports can be undone through project history."
           : kind === "folder" ? "Keeps the selected folder’s name and all files inside it, merging into a folder that already exists. Empty folders are omitted. You can undo this import."
           : "Copies the selected files into this project. You can undo this import."}
+        {kind !== "behavior" && " Each behavior.xar becomes a behavior, and .dlg and .top files become dialogs and topics."}
         {" "}If something with the same name exists, you are asked what to do. Changes are written on Save.
       </p>
       {error && <p className="error" role="alert">{error}</p>}

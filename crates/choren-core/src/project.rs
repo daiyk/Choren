@@ -533,17 +533,23 @@ impl Project {
         if folder.contains(['\\', '/', '<', '>', ':', '"', '|', '?', '*']) || dir.join(&folder).exists() || self.behaviors.iter().any(|b| b.name == folder) {
             return Err(format!("A behavior named \"{folder}\" already exists or the name is invalid."));
         }
+        self.list_behavior(&folder, "behavior.xar", crate::templates::behavior(root).as_bytes())?;
+        Ok(self.behaviors.last().unwrap().id.clone())
+    }
+
+    /// Lists the behavior document `<folder>/<xar>` in the PML and the manifest (written on save).
+    pub(crate) fn list_behavior(&mut self, folder: &str, xar: &str, bytes: &[u8]) -> Result<(), String> {
+        let e = crate::xml::escape_attr;
         let sec = self.pml_section("BehaviorDescriptions")?;
-        crate::edit::insert_raw(self.pml.as_mut().unwrap(), sec, &format!("<BehaviorDescription name=\"behavior\" src=\"{}\" xar=\"behavior.xar\" />", crate::xml::escape_attr(&folder)))?;
+        crate::edit::insert_raw(self.pml.as_mut().unwrap(), sec, &format!("<BehaviorDescription name=\"behavior\" src=\"{}\" xar=\"{}\" />", e(folder), e(xar)))?;
         if let Some((_, m)) = self.manifest.as_mut() {
             let root = m.root().unwrap();
             let contents = match m.kid(root, "contents") { Some(c) => c, None => crate::edit::insert_raw(m, root, "<contents />")? };
-            crate::edit::insert_raw(m, contents, &format!("<behaviorContent path=\"{}\">\n    <nature>interactive</nature>\n    <permissions/>\n</behaviorContent>", crate::xml::escape_attr(&folder)))?;
+            crate::edit::insert_raw(m, contents, &format!("<behaviorContent path=\"{}\">\n    <nature>interactive</nature>\n    <permissions/>\n</behaviorContent>", e(folder)))?;
         }
-        let file = format!("{folder}/behavior.xar");
-        self.push_behavior(folder, file, crate::templates::behavior(root).as_bytes())?;
+        self.push_behavior(folder.to_string(), format!("{folder}/{xar}"), bytes)?;
         self.structure_dirty = true;
-        Ok(self.behaviors.last().unwrap().id.clone())
+        Ok(())
     }
 
     /// Removes a behavior from the project lists. Its files stay on disk (never deleted silently).
