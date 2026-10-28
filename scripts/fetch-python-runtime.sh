@@ -2,7 +2,7 @@
 # Downloads the relocatable CPython that the packaged app runs box scripts with into
 # app/src-tauri/python-runtime/ (bundled as a resource, see tauri.conf.json).
 # Usage: scripts/fetch-python-runtime.sh [target-triple]   (default: $TAURI_ENV_TARGET_TRIPLE, else this machine)
-# Needs curl, tar and shasum; on macOS also codesign and security when APPLE_SIGNING_IDENTITY is set.
+# Needs curl, tar and sha256sum or shasum; on macOS also codesign and security when APPLE_SIGNING_IDENTITY is set.
 set -euo pipefail
 
 # python-build-standalone "install_only_stripped" builds.
@@ -35,7 +35,9 @@ if [[ "$(cat "$stamp" 2>/dev/null)" != "$name" ]]; then
   tmp="$(mktemp -d "$(dirname "$dest")/.python-runtime-XXXXXX")"
   trap 'rm -rf "$tmp"' EXIT
   curl -fsSL -o "$tmp/python.tar.gz" "https://github.com/astral-sh/python-build-standalone/releases/download/$release/${name//+/%2B}"
-  echo "$sha  $tmp/python.tar.gz" | shasum -a 256 -c - >/dev/null
+  # macOS has shasum; Git's sh on Windows may lack it (Perl's core_perl is off its PATH) but has sha256sum.
+  if command -v sha256sum >/dev/null; then check=(sha256sum -c -); else check=(shasum -a 256 -c -); fi
+  echo "$sha  $tmp/python.tar.gz" | "${check[@]}" >/dev/null
   tar -xzf "$tmp/python.tar.gz" -C "$tmp"
 
   # Not needed by the box host (standard library only) or by box scripts: Tk, tests, pip, headers.
@@ -45,9 +47,12 @@ if [[ "$(cat "$stamp" 2>/dev/null)" != "$name" ]]; then
   (
     cd "$tmp/python"
     shopt -s nullglob
-    rm -rf include share libs Scripts tcl lib/pkgconfig lib/libpython3.12.dylib lib/*tcl* lib/*tk* lib/itcl* lib/thread* \
-      DLLs/_tkinter* DLLs/tcl* DLLs/tk* lib/python3.12/lib-dynload/_{tkinter,dbm,crypt}* \
+    rm -rf include share libs Scripts tcl DLLs/_tkinter* DLLs/tcl* DLLs/tk* \
       bin/idle* bin/pip* bin/pydoc* bin/2to3* bin/*-config bin/python bin/python3
+    # Windows paths ignore case, so there these would match the standard library in Lib/ (threading.py).
+    if [[ "$triple" != *-windows-* ]]; then
+      rm -rf lib/pkgconfig lib/libpython3.12.dylib lib/*tcl* lib/*tk* lib/itcl* lib/thread* lib/python3.12/lib-dynload/_{tkinter,dbm,crypt}*
+    fi
     for lib in lib/python3.12 Lib; do
       for p in test idlelib tkinter turtledemo turtle.py ensurepip lib2to3 pydoc_data venv 'config-3.12*' 'site-packages/pip*'; do
         rm -rf "${lib:?}"/$p

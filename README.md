@@ -96,6 +96,23 @@ To use Choregraphe's robot meshes, box library and icons, point **Settings** at 
 Choregraphe installation. See [app/README.md](app/README.md) for the full feature tour and
 development notes.
 
+## Release notes
+
+Maintain [CHANGELOG.md](CHANGELOG.md) as changes are made. Before each release:
+
+1. Move the release's completed notes from `Unreleased` into a section headed
+   `## [version] - YYYY-MM-DD`, using the version from `app/src-tauri/tauri.conf.json`.
+2. Preview the extracted notes with `node scripts/release-notes.mjs` from the repo root.
+3. Commit the version and changelog updates, then push the matching `v<version>` tag.
+
+The release workflow extracts that version's notes before building and places them
+above the installation instructions in the new draft GitHub release. Missing,
+duplicate, or empty entries fail the workflow. Manual runs use the app version too.
+Review the draft and publish it when ready. Existing release descriptions are not
+rewritten by a rerun; edit those on GitHub if needed.
+
+Test the extractor with `node --test scripts/release-notes.test.mjs`.
+
 ## ⚖️ Legal
 
 Choren is an independent open-source project that is built to stay on the right side of the
