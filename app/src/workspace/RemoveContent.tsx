@@ -37,7 +37,7 @@ export function RemoveContent({target, warning, onClose, onRemove}: {
     onClose();
   };
   return <Modal title={title} onClose={() => !busy && onClose()}>
-    <div className="settings-content">
+    <div className="settings-content import-form">
       {behavior ? <p>Remove “{behavior.name}” from the project?</p> : <>
         <p>Remove {entries.length === 1 ? "the project entry" : `the ${entries.length} project entries`} in “{folder}”?</p>
         {entries.length > 0 && <ul className="import-sources" aria-label="Project entries">{entries.map(f => <li key={f.path}>{f.path}</li>)}</ul>}
@@ -47,7 +47,7 @@ export function RemoveContent({target, warning, onClose, onRemove}: {
       {error ? <p className="error" role="alert">{error}</p> : files === undefined ? <p className="muted">Checking files on disk…</p>
         : files.length ? <ul className="import-sources" aria-label="Files to delete">{files.map(path => <li key={path}>{path}</li>)}</ul>
           : <p className="muted">There are no files on disk to delete.</p>}
-      <div className="dialog-actions">
+      <div className="dialog-footer">
         <button type="button" disabled={busy} onClick={onClose}>Cancel</button>
         <button type="button" disabled={busy} onClick={() => void run(false)}>Remove from project, keep files</button>
         <button type="button" className="danger" disabled={busy || !files?.length} onClick={() => void run(true)}>Delete files too</button>

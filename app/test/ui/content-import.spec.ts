@@ -133,9 +133,13 @@ test("folder import opens the behavior it brings and lists it in the Outline", a
   await page.getByRole("button", { name: "Import content", exact: true }).click();
   await page.getByRole("button", { name: "Import folder…", exact: true }).click();
   const folder = page.getByRole("dialog", { name: "Import folder", exact: true });
-  await expect(folder).toContainText("Each behavior.xar becomes a behavior");
+  await expect(folder.locator(".import-tip")).toContainText("Each behavior.xar becomes a behavior");
+  await expect(folder.getByRole("button", { name: "Import folder", exact: true })).toBeDisabled();
   await page.evaluate(() => (window as any).picks.push("/outside/show"));
   await folder.getByRole("button", { name: "Choose folder…", exact: true }).click();
+  await expect(folder.getByRole("button", { name: "Choose folder…", exact: true })).toHaveText("Change…");
+  await folder.getByRole("textbox", { name: "Destination folder" }).fill("demos/");
+  await expect(folder.locator(".import-hint")).toHaveText("Imported as demos/show/");
   await folder.getByRole("button", { name: "Import folder", exact: true }).click();
   await expect(folder).toBeHidden();
   await expect(page.locator(".notice")).toContainText("Folder imported with 1 behavior");
