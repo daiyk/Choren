@@ -1,3 +1,4 @@
+mod elevate;
 mod library;
 mod project;
 mod robot;

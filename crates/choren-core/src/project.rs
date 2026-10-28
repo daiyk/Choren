@@ -262,73 +262,41 @@ impl Project {
     /// Writes behaviors, staged files, and the PML/manifest when they changed. Unmodified
     /// documents are written byte for byte; each file is replaced atomically.
     pub fn save(&mut self) -> Result<(), String> {
+        self.save_plan()?.apply().map_err(|e| e.message)?;
+        self.saved();
+        Ok(())
+    }
+
+    /// The files a save writes and deletes, in order, without touching the disk.
+    pub fn save_plan(&self) -> Result<SavePlan, String> {
         // shortcut: CRG archives are import-only; saving one needs "save as project folder".
         let dir = self.root_dir().ok_or("Legacy .crg archives are read-only. Use File › Save as project folder…")?;
-        let put = |rel: &str, bytes: &[u8]| -> Result<(), String> {
-            let target = dir.join(rel);
-            if let Some(parent) = target.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| format!("Cannot create {}: {e}", parent.display()))?;
-            }
-            // Imports can contain any filename, including the old fixed temporary suffix.
-            // Reserve a fresh sibling so saving never clobbers a different project file.
-            let write = || -> std::io::Result<()> {
-                use std::io::Write;
-                for index in 0u64.. {
-                    let tmp = target.with_file_name(format!(".choren-save-{}-{index}", std::process::id()));
-                    let mut file = match std::fs::OpenOptions::new().write(true).create_new(true).open(&tmp) {
-                        Ok(file) => file,
-                        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-                        Err(e) => return Err(e),
-                    };
-                    let result = file.write_all(bytes);
-                    drop(file);
-                    let result = result.and_then(|_| std::fs::rename(&tmp, &target));
-                    if result.is_err() { let _ = std::fs::remove_file(&tmp); }
-                    return result;
-                }
-                unreachable!()
-            };
-            write().map_err(|e| {
-                if e.kind() == std::io::ErrorKind::PermissionDenied {
-                    format!("Cannot save {}: {e}. Check write permissions for the file and its containing folder (saving creates and replaces a temporary file there). Your edits have not been discarded.", target.display())
-                } else {
-                    format!("Cannot save {rel}: {e}")
-                }
-            })
-        };
-        for b in &self.behaviors {
-            put(&b.source, b.doc.write().as_bytes())?;
-        }
-        for (rel, bytes) in &self.pending {
-            put(rel, bytes)?;
-        }
+        let mut steps: Vec<SaveStep> = self.behaviors.iter().map(|b| SaveStep::Write(b.source.clone(), b.doc.write().into_bytes())).collect();
+        steps.extend(self.pending.iter().map(|(rel, bytes)| SaveStep::Write(rel.clone(), bytes.clone())));
         let mut folders = BTreeSet::new();
-        for rel in self.deleted.clone() {
-            if !self.listed(&rel) {
-                match std::fs::remove_file(dir.join(&rel)) {
-                    Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(format!("Cannot delete {rel}: {e}")),
-                    _ => {}
-                }
-                folders.extend(Path::new(&rel).ancestors().skip(1).filter(|d| !d.as_os_str().is_empty()).map(Path::to_path_buf));
-            }
-            self.deleted.remove(&rel);
+        for rel in self.deleted.iter().filter(|rel| !self.listed(rel)) {
+            steps.push(SaveStep::Delete(rel.clone()));
+            folders.extend(Path::new(rel).ancestors().skip(1).filter(|d| !d.as_os_str().is_empty()).map(|d| d.to_string_lossy().into_owned()));
         }
         // Deepest first; folders that still hold other files stay.
-        for folder in folders.iter().rev() {
-            let _ = std::fs::remove_dir(dir.join(folder));
-        }
+        steps.extend(folders.into_iter().rev().map(SaveStep::RemoveFolder));
         if self.structure_dirty {
             if let Some(pml) = &self.pml {
                 let name = Path::new(&self.source).file_name().unwrap().to_string_lossy().to_string();
-                put(&name, pml.write().as_bytes())?;
+                steps.push(SaveStep::Write(name, pml.write().into_bytes()));
             }
             if let Some((rel, m)) = &self.manifest {
-                put(rel, m.write().as_bytes())?;
+                steps.push(SaveStep::Write(rel.clone(), m.write().into_bytes()));
             }
         }
+        Ok(SavePlan { dir, steps })
+    }
+
+    /// Marks the project as written by its last `save_plan`.
+    pub fn saved(&mut self) {
         self.pending.clear();
+        self.deleted.clear();
         self.structure_dirty = false;
-        Ok(())
     }
 
     pub fn state(&self, h: &crate::edit::History, created: Vec<usize>) -> crate::edit::HistoryState {
@@ -1296,4 +1264,80 @@ pub fn write_folder(dir: &Path, name: &str, behaviors: &[(String, Vec<u8>)], res
         std::fs::write(&target, bytes).map_err(|err| format!("Cannot write {}: {err}", target.display()))?;
     }
     Ok(())
+}
+
+/// One file operation of a save, relative to the project folder.
+#[derive(Clone, Debug, PartialEq)]
+pub enum SaveStep {
+    Write(String, Vec<u8>),
+    Delete(String),
+    /// Removed only when empty.
+    RemoveFolder(String),
+}
+
+/// What a save does to the project folder `dir`, in order.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SavePlan {
+    pub dir: PathBuf,
+    pub steps: Vec<SaveStep>,
+}
+
+/// A failed save; `denied` when the OS refused access, so an administrator may still save.
+#[derive(Debug)]
+pub struct SaveError {
+    pub denied: bool,
+    pub message: String,
+}
+
+impl SavePlan {
+    /// Performs the plan as the current user; each file is replaced atomically.
+    pub fn apply(&self) -> Result<(), SaveError> {
+        let fail = |e: &std::io::Error, message: String| SaveError { denied: e.kind() == std::io::ErrorKind::PermissionDenied, message };
+        for step in &self.steps {
+            match step {
+                SaveStep::Write(rel, bytes) => {
+                    let target = self.dir.join(rel);
+                    if let Some(parent) = target.parent() {
+                        std::fs::create_dir_all(parent).map_err(|e| fail(&e, format!("Cannot create {}: {e}", parent.display())))?;
+                    }
+                    replace(&target, bytes).map_err(|e| {
+                        if e.kind() == std::io::ErrorKind::PermissionDenied {
+                            fail(&e, format!("Cannot save {}: {e}. Check write permissions for the file and its containing folder (saving creates and replaces a temporary file there). Your edits have not been discarded.", target.display()))
+                        } else {
+                            fail(&e, format!("Cannot save {rel}: {e}"))
+                        }
+                    })?;
+                }
+                SaveStep::Delete(rel) => match std::fs::remove_file(self.dir.join(rel)) {
+                    Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(fail(&e, format!("Cannot delete {rel}: {e}"))),
+                    _ => {}
+                },
+                SaveStep::RemoveFolder(rel) => {
+                    let _ = std::fs::remove_dir(self.dir.join(rel));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Writes `bytes` to a fresh sibling of `target`, then renames it over `target`.
+fn replace(target: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    // Imports can contain any filename, including the old fixed temporary suffix.
+    // Reserve a fresh sibling so saving never clobbers a different project file.
+    for index in 0u64.. {
+        let tmp = target.with_file_name(format!(".choren-save-{}-{index}", std::process::id()));
+        let mut file = match std::fs::OpenOptions::new().write(true).create_new(true).open(&tmp) {
+            Ok(file) => file,
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        };
+        let result = file.write_all(bytes);
+        drop(file);
+        let result = result.and_then(|_| std::fs::rename(&tmp, target));
+        if result.is_err() { let _ = std::fs::remove_file(&tmp); }
+        return result;
+    }
+    unreachable!()
 }

@@ -108,11 +108,27 @@ pub fn project_redo(sessions: State<Sessions>, session: u32) -> Result<Option<Ch
     with(&sessions, session, |p, h| Ok(edit::redo(p, h).map(|_| Changed { history: p.state(h, vec![]), document: view::project(p) })))
 }
 
+/// Saves the project; when the OS refuses access, the system administrator prompt offers to
+/// save it anyway.
 #[tauri::command]
-pub fn project_save(sessions: State<Sessions>, session: u32) -> Result<HistoryState, String> {
+pub async fn project_save(sessions: State<'_, Sessions>, session: u32) -> Result<HistoryState, String> {
+    let plan = with(&sessions, session, |p, _| p.save_plan())?;
+    if let Err(e) = plan.apply() {
+        if !e.denied { return Err(e.message); }
+        // Unlocked while the prompt is up so the editor stays responsive.
+        let staged = plan.clone();
+        match tauri::async_runtime::spawn_blocking(move || crate::elevate::apply(&staged)).await.map_err(|e| e.to_string())? {
+            Ok(()) => {}
+            Err(crate::elevate::Failure::Cancelled) => return Err("Not saved: administrator access was cancelled. Your edits have not been discarded.".into()),
+            Err(crate::elevate::Failure::Failed(message)) => return Err(format!("{message}. Your edits have not been discarded.")),
+        }
+    }
     with(&sessions, session, |p, h| {
-        p.save()?;
-        h.mark_saved();
+        // Edits made while saving stay unsaved.
+        if p.save_plan()? == plan {
+            p.saved();
+            h.mark_saved();
+        }
         Ok(p.state(h, vec![]))
     })
 }
