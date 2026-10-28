@@ -157,7 +157,7 @@ function behaviorActions(ws: ReturnType<typeof useWorkspace>, behaviorId: string
     {label: "Open behavior", run: () => ws.openBehavior(behaviorId)},
     {label: "Behavior properties…", run: () => ws.execute("properties", {behaviorId}), disabled: !editable, reason: "An editable project folder is required."},
     {label: "Export behavior…", run: () => ws.execute("export-crg", {behaviorId}), disabled: !ws.editable, reason: "Open this project in the desktop app."},
-    {label: "Remove behavior from project…", run: () => ws.execute("remove-behavior", {behaviorId}), disabled: !editable, reason: "An editable project folder is required."},
+    {label: "Delete behavior…", run: () => ws.execute("remove-behavior", {behaviorId}), disabled: !editable, reason: "An editable project folder is required."},
   ];
 }
 function boxActions(ws: ReturnType<typeof useWorkspace>, box: Box, address: GraphAddress): MenuAction[] {
@@ -170,6 +170,8 @@ function boxActions(ws: ReturnType<typeof useWorkspace>, box: Box, address: Grap
     ...[["cut", "Cut"], ["copy", "Copy"], ["convert-to-box", "Group into box…"], ["delete", "Delete box"]].map(([id, label]) => ({label, run: () => ws.execute(id, target), disabled: !ws.editable || box.node === undefined, reason: "This box is read-only."})),
   ];
 }
+const containsProjectFile = (entry: FileTree): boolean =>
+  entry.file?.kind === "project" || entry.file?.kind === "manifest" || entry.children.some(containsProjectFile);
 function FileBranch({entry}: {entry: FileTree}) {
   const ws = useWorkspace();
   const resource = useResourceActions(entry.file);
@@ -182,6 +184,7 @@ function FileBranch({entry}: {entry: FileTree}) {
         {label: "Expand subtree", run: () => {details.querySelectorAll("details").forEach(d => d.open = true); (details as HTMLDetailsElement).open = true;}},
         {label: "Collapse subtree", run: () => {details.querySelectorAll("details").forEach(d => d.open = false); (details as HTMLDetailsElement).open = false;}},
         ...["files", "folder"].map(kind => ({label: `Import ${kind} here…`, run: () => ws.execute(`import-${kind}`, {destination: entry.path}), disabled: !ws.editable || ws.state.project?.format !== "pml", reason: "An editable project folder is required."})),
+        {label: "Delete folder…", run: () => ws.execute("remove-folder", {folder: entry.path}), disabled: !ws.editable || ws.state.project?.format !== "pml" || containsProjectFile(entry), reason: containsProjectFile(entry) ? "This folder holds the project file or its manifest." : "An editable project folder is required."},
       ];
     })}><FolderOpen size={14}/><span>{entry.name}</span></summary>
     <FileBranches entries={entry.children}/>

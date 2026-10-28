@@ -41,6 +41,12 @@ export async function editorProject(page: Page, extraBehavior = false) {
           doc.files = doc.files.filter(f => f.behaviorId !== args.behavior);
           return {document: structuredClone(doc), history: {revision: ++revision, dirty: true, undo: "Remove behavior", created: []}};
         }
+        if (command === "project_removal_files") return [args.folder ? `${args.folder}/behavior.xar` : "other/behavior.xar", "other/notes.txt"];
+        if (command === "project_remove_folder") {
+          doc.behaviors = doc.behaviors.filter(b => !b.source.startsWith(`${args.folder}/`));
+          doc.files = doc.files.filter(f => !f.path.startsWith(`${args.folder}/`));
+          return {document: structuredClone(doc), history: {revision: ++revision, dirty: true, undo: "Delete folder", created: []}};
+        }
         if (command === "project_copy") {
           if ((window as any).holdCopy) await new Promise<void>(resolve => { (window as any).releaseCopy = resolve; });
           return '<Key frame="10" value="5"/>';

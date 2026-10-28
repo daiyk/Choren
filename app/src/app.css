@@ -1347,6 +1347,9 @@ dd {
   border-top: 1px solid var(--border);
   padding-top: 16px;
 }
+.dialog-actions button.danger:not(:disabled) {
+  color: var(--danger);
+}
 @media (max-width: 1150px) {
   .project-title {
     display: none;

@@ -1403,7 +1403,8 @@ pub fn change_project(p: &mut Project, h: &mut History, label: &str, work: impl 
     after.structure_dirty = true;
     h.redo.clear();
     if h.saved.is_some_and(|s| s > h.undo.len()) { h.saved = None; }
-    let paths: std::collections::BTreeSet<_> = before.pending.keys().chain(after.pending.keys()).cloned().collect();
+    // Deleted files are kept here too, so undoing the step restages them after a save.
+    let paths: std::collections::BTreeSet<_> = before.pending.keys().chain(after.pending.keys()).chain(after.deleted.difference(&before.deleted)).cloned().collect();
     let files = paths.into_iter().filter_map(|path| {
         let old = before.read_file(&path);
         let new = after.read_file(&path);
@@ -1420,8 +1421,14 @@ fn replay(p: &mut Project, t: &Transaction, forward: bool) {
         // Later file edits may already have been saved and undone. Keep their staged inverse;
         // only this transaction's file differences are replayed below.
         let pending = std::mem::take(&mut p.pending);
-        *p = (if forward { after } else { before }).as_ref().clone();
+        // Saves clear `deleted`; replay only this step's deletions instead of the snapshot's set.
+        let mut deleted = std::mem::take(&mut p.deleted);
+        let (from, to) = if forward { (before, after) } else { (after, before) };
+        from.deleted.difference(&to.deleted).for_each(|path| { deleted.remove(path); });
+        deleted.extend(to.deleted.difference(&from.deleted).cloned());
+        *p = to.as_ref().clone();
         p.pending = pending;
+        p.deleted = deleted;
         p.structure_dirty = true;
     }
     if let Some(b) = t.behavior.as_ref().and_then(|id| p.behaviors.iter_mut().find(|b| &b.id == id)) {

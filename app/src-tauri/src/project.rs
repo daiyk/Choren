@@ -197,13 +197,46 @@ pub fn project_import_behavior(app: tauri::AppHandle, sessions: State<Sessions>,
     })
 }
 
-/// Removes a behavior from the project; its files are kept on disk.
+/// Removes a behavior (or every entry under `folder`) from the project. With `delete_files`, the
+/// behavior's folder (or `folder`) is deleted from disk on the next save, except files the
+/// project still lists.
+fn remove(p: &mut Project, behavior: Option<&str>, folder: Option<&str>, delete_files: bool) -> Result<(), String> {
+    match (behavior, folder) {
+        (Some(id), _) => {
+            let source = p.behaviors.iter().find(|b| b.id == id).ok_or("Unknown behavior")?.source.clone();
+            p.remove_behavior(&mut History::fresh(), id)?;
+            if delete_files { p.delete_path(choren_core::project::behavior_files(&source))?; }
+        }
+        (None, Some(folder)) => {
+            p.remove_folder(&mut History::fresh(), folder)?;
+            if delete_files { p.delete_path(folder)?; }
+        }
+        (None, None) => return Err("Select a behavior or a folder.".into()),
+    }
+    Ok(())
+}
+
 #[tauri::command]
-pub fn project_remove_behavior(sessions: State<Sessions>, session: u32, behavior: String) -> Result<Changed, String> {
+pub fn project_remove_behavior(sessions: State<Sessions>, session: u32, behavior: String, delete_files: Option<bool>) -> Result<Changed, String> {
+    let delete = delete_files.unwrap_or(false);
     with(&sessions, session, |p, h| {
-        edit::change_project(p, h, "Remove behavior", |p| p.remove_behavior(&mut History::fresh(), &behavior))?;
+        edit::change_project(p, h, if delete { "Delete behavior" } else { "Remove behavior" }, |p| remove(p, Some(&behavior), None, delete))?;
         Ok(Changed { history: p.state(h, vec![]), document: view::project(p) })
     })
+}
+
+#[tauri::command]
+pub fn project_remove_folder(sessions: State<Sessions>, session: u32, folder: String, delete_files: bool) -> Result<Changed, String> {
+    with(&sessions, session, |p, h| {
+        edit::change_project(p, h, if delete_files { "Delete folder" } else { "Remove folder" }, |p| remove(p, None, Some(&folder), delete_files))?;
+        Ok(changed(p, h, vec![]))
+    })
+}
+
+/// The files that removing a behavior or folder with `delete_files` would delete on save.
+#[tauri::command]
+pub fn project_removal_files(sessions: State<Sessions>, session: u32, behavior: Option<String>, folder: Option<String>) -> Result<Vec<String>, String> {
+    with(&sessions, session, |p, _| p.deletion_preview(|p| remove(p, behavior.as_deref(), folder.as_deref(), true)))
 }
 
 #[tauri::command]

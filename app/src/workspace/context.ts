@@ -17,7 +17,7 @@ export interface ScriptDocument {
   box: Box;
   address?: GraphAddress;
 }
-export interface CommandTarget { behaviorId?: string; address?: GraphAddress; boxId?: number; destination?: string; }
+export interface CommandTarget { behaviorId?: string; address?: GraphAddress; boxId?: number; destination?: string; folder?: string; }
 export interface WorkspaceContextValue {
   state: WorkspaceState;
   graphStyle: GraphStyle;

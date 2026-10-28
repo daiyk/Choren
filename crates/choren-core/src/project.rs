@@ -2,7 +2,7 @@
 
 use crate::view::{Diagnostic, ProjectFile};
 use crate::xml::{Doc, NodeId};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize)]
@@ -36,6 +36,8 @@ pub struct Project {
     pub manifest: Option<(String, Doc)>,
     /// Files staged for the next save (relative path → bytes), e.g. library attachments.
     pub pending: BTreeMap<String, Vec<u8>>,
+    /// Files deleted from disk on the next save (relative paths), e.g. a removed behavior's folder.
+    pub deleted: BTreeSet<String>,
     /// The PML/manifest or the behavior list changed outside the undo history.
     pub structure_dirty: bool,
     /// Non-behavior files of a `.crg` archive (relative path → bytes), kept for save-as-folder.
@@ -104,7 +106,7 @@ impl Project {
         };
         let bytes = std::fs::read(path).map_err(|e| format!("Cannot read {source}: {e}"))?;
         let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-        let mut p = Project { source: source.clone(), format, name: stem, behaviors: vec![], files: vec![], metadata: BTreeMap::new(), diagnostics: vec![], pml: None, manifest: None, pending: BTreeMap::new(), structure_dirty: false, archive: BTreeMap::new() };
+        let mut p = Project { source: source.clone(), format, name: stem, behaviors: vec![], files: vec![], metadata: BTreeMap::new(), diagnostics: vec![], pml: None, manifest: None, pending: BTreeMap::new(), deleted: BTreeSet::new(), structure_dirty: false, archive: BTreeMap::new() };
         match format {
             Format::Xar => {
                 let file = path.file_name().unwrap().to_string_lossy().to_string();
@@ -244,6 +246,21 @@ impl Project {
         for (rel, bytes) in &self.pending {
             put(rel, bytes)?;
         }
+        let mut folders = BTreeSet::new();
+        for rel in self.deleted.clone() {
+            if !self.listed(&rel) {
+                match std::fs::remove_file(dir.join(&rel)) {
+                    Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(format!("Cannot delete {rel}: {e}")),
+                    _ => {}
+                }
+                folders.extend(Path::new(&rel).ancestors().skip(1).filter(|d| !d.as_os_str().is_empty()).map(Path::to_path_buf));
+            }
+            self.deleted.remove(&rel);
+        }
+        // Deepest first; folders that still hold other files stay.
+        for folder in folders.iter().rev() {
+            let _ = std::fs::remove_dir(dir.join(folder));
+        }
         if self.structure_dirty {
             if let Some(pml) = &self.pml {
                 let name = Path::new(&self.source).file_name().unwrap().to_string_lossy().to_string();
@@ -260,7 +277,7 @@ impl Project {
 
     pub fn state(&self, h: &crate::edit::History, created: Vec<usize>) -> crate::edit::HistoryState {
         let mut s = h.state(created);
-        s.dirty |= self.structure_dirty || !self.pending.is_empty();
+        s.dirty |= self.structure_dirty || !self.pending.is_empty() || !self.deleted.is_empty();
         s
     }
 
@@ -436,6 +453,7 @@ impl Project {
 
     /// Reads a project file: staged contents first, then the archive, then the project folder.
     pub fn read_file(&self, rel: &str) -> Option<Vec<u8>> {
+        if self.deleted.contains(rel) { return None; }
         self.pending.get(rel).or_else(|| self.archive.get(rel)).cloned().or_else(|| std::fs::read(self.root_dir()?.join(rel)).ok())
     }
 
@@ -444,9 +462,14 @@ impl Project {
         let on_disk = self.root_dir().and_then(|d| std::fs::read(d.join(rel)).ok());
         match content {
             Some(c) if Some(&c) != on_disk.as_ref() => {
+                self.deleted.remove(rel);
                 self.pending.insert(rel.to_string(), c);
             }
-            _ => {
+            Some(_) => {
+                self.deleted.remove(rel);
+                self.pending.remove(rel);
+            }
+            None => {
                 self.pending.remove(rel);
             }
         }
@@ -548,6 +571,57 @@ impl Project {
         self.files.retain(|f| f.behavior_id.as_deref() != Some(&b.id));
         self.structure_dirty = true;
         Ok(())
+    }
+
+    /// Removes everything listed under `folder`: behaviors, resources, dialogs, topics and
+    /// translations. Files stay on disk unless `delete_path` marks them too.
+    pub fn remove_folder(&mut self, h: &mut crate::edit::History, folder: &str) -> Result<(), String> {
+        let folder = relative(folder)?;
+        let inside = |path: &str| path.strip_prefix(folder.as_str()).is_some_and(|rest| rest.starts_with('/'));
+        if self.files.iter().any(|f| matches!(f.kind, "project" | "manifest") && inside(&f.path)) {
+            return Err("This folder holds the project file or its manifest.".into());
+        }
+        for id in self.behaviors.iter().filter(|b| inside(&b.source)).map(|b| b.id.clone()).collect::<Vec<_>>() {
+            self.remove_behavior(h, &id)?;
+        }
+        for f in self.files.iter().filter(|f| inside(&f.path)).cloned().collect::<Vec<_>>() {
+            let section = match f.kind { "resource" => "Resources", "dialog" => "Dialogs", "topic" => "Topics", "translation" => "Translations", _ => continue };
+            self.list(&Listing::new(section, String::new(), &f.path, f.kind), false)?;
+            self.pending.remove(&f.path);
+        }
+        Ok(())
+    }
+
+    /// Marks `rel` (a file or a folder) for deletion on the next save. Files the project still
+    /// lists are kept, so remove their listings first.
+    pub fn delete_path(&mut self, rel: &str) -> Result<(), String> {
+        let rel = relative(rel)?;
+        let dir = self.root_dir().ok_or("Deleting files needs a project folder")?;
+        let mut checked = dir.clone();
+        for component in rel.split('/').collect::<Vec<_>>().split_last().unwrap().1 {
+            checked.push(component);
+            if checked.is_symlink() { return Err("Cannot delete files through a symbolic link.".into()); }
+        }
+        let mut found = vec![];
+        collect_files(&dir, &rel, &mut found);
+        found.extend(self.pending.keys().filter(|k| *k == &rel || k.starts_with(&format!("{rel}/"))).cloned());
+        for path in found {
+            if self.listed(&path) { continue; }
+            self.pending.remove(&path);
+            self.deleted.insert(path);
+        }
+        Ok(())
+    }
+
+    /// The files `delete_path` would add (and a following save delete), without changing anything.
+    pub fn deletion_preview(&self, work: impl FnOnce(&mut Project) -> Result<(), String>) -> Result<Vec<String>, String> {
+        let mut after = self.clone();
+        work(&mut after)?;
+        Ok(after.deleted.difference(&self.deleted).cloned().collect())
+    }
+
+    fn listed(&self, path: &str) -> bool {
+        self.files.iter().any(|f| f.path == path) || self.behaviors.iter().any(|b| b.source == path)
     }
 
     /// Renames a listed resource and its structured box references. Old files stay on disk.
@@ -878,6 +952,21 @@ fn set_requirements(m: &mut Doc, root: NodeId, r: &Requirements) -> Result<(), S
 
 /// Writes `<dir>/<name>.pml`, `manifest.xml`, the behavior folders (`folder/behavior.xar`) and
 /// resource files, refusing to overwrite an existing project.
+/// Collects the files at or under `rel` (symbolic links count as files and are never followed).
+fn collect_files(root: &Path, rel: &str, out: &mut Vec<String>) {
+    let path = root.join(rel);
+    let Ok(meta) = std::fs::symlink_metadata(&path) else { return };
+    if !meta.is_dir() { return out.push(rel.to_string()); }
+    for entry in std::fs::read_dir(&path).into_iter().flatten().flatten() {
+        if let Some(name) = entry.file_name().to_str() { collect_files(root, &format!("{rel}/{name}"), out); }
+    }
+}
+
+/// The folder holding a behavior's files, or its `.xar` alone when it sits at the project root.
+pub fn behavior_files(source: &str) -> &str {
+    source.rsplit_once('/').map_or(source, |(dir, _)| dir)
+}
+
 pub fn write_folder(dir: &Path, name: &str, behaviors: &[(String, Vec<u8>)], resources: &[(String, Vec<u8>)]) -> Result<(), String> {
     if name.is_empty() || name.contains(['\\', '/', '<', '>', ':', '"', '|', '?', '*']) {
         return Err("Can not contain any of these characters: \\ / < > : \" | ? *".into());

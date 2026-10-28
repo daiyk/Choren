@@ -45,6 +45,8 @@ pub fn run() {
             project::project_import_files,
             project::project_import_behavior,
             project::project_remove_behavior,
+            project::project_remove_folder,
+            project::project_removal_files,
             project::project_manifest,
             project::project_set_manifest,
             project::library_add_box,

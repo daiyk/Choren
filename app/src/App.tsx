@@ -120,6 +120,7 @@ import { WelcomeSetup } from "./workspace/WelcomeSetup";
 import { Connection } from "./robot/Connection";
 import { VirtualMovementSpeed } from "./robot/panels";
 import { ImportContent, type ImportKind } from "./workspace/ImportContent";
+import { RemoveContent, type RemovalTarget } from "./workspace/RemoveContent";
 import { UpdateDialog } from "./workspace/UpdateDialog";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { flushSync } from "react-dom";
@@ -257,12 +258,14 @@ export default function App() {
     | "new-behavior"
     | "connection"
     | "import"
+    | "remove"
     | "welcome"
     | undefined
   >(() => (native && !getShareDir() && readPreference(WELCOME_KEY) !== "done" ? "welcome" : undefined));
   const [importKind, setImportKind] = useState<ImportKind>("behavior");
   const [importDestination, setImportDestination] = useState("");
   const [propertiesBehavior, setPropertiesBehavior] = useState<string>();
+  const [removal, setRemoval] = useState<{target: RemovalTarget; warning?: string}>();
   const [groupTarget, setGroupTarget] = useState<{project: ProjectDocument; address: GraphAddress; nodes: number[]}>();
   const [convertName, setConvertName] = useState("Box");
   const [behaviorForm, setBehaviorForm] = useState<{
@@ -817,6 +820,20 @@ export default function App() {
       if (active) openBehavior(active);
     }
   }, [openBehavior]);
+  const removeContent = async ({project, behaviorId, folder}: RemovalTarget, deleteFiles: boolean) => {
+    if (stateRef.current.project !== project) { setNotice("The project changed. Choose what to remove again.", "error"); return false; }
+    const result = await change(() => behaviorId ? authoring.removeBehavior(session, behaviorId, deleteFiles) : authoring.removeFolder(session, folder!, deleteFiles));
+    if (!result) return false;
+    const gone = project.behaviors.filter(b => !result.document.behaviors.some(r => r.id === b.id)).map(b => b.id);
+    const goneFiles = new Set(project.files.filter(f => !result.document.files.some(r => r.path === f.path)).map(f => `file:${session}:${f.path}`));
+    const removed = (key?: string) => !!key && gone.some(id => key.startsWith(`script:${id}:node`));
+    for (const key of [...drafts.current.keys()]) if (removed(key) || goneFiles.has(key)) drafts.current.delete(key);
+    draftListeners.current.forEach(listener => listener());
+    for (const panel of dockRef.current?.panels ?? [])
+      if ((panel.params?.kind === "graph" && gone.includes(panel.params.behaviorId)) || (panel.params?.kind === "script" && removed(panel.params.scriptId))) panel.api.close();
+    if (deleteFiles) setNotice("Removed. The files are deleted from disk when you save.");
+    return true;
+  };
   const runTargeted = (id: string, target: CommandTarget) => {
     const project = stateRef.current.project;
     if (!project) return;
@@ -838,20 +855,16 @@ export default function App() {
         setManifest(m); setModal("properties");
       }, fail); return;
     }
-    if (!behavior) return;
-    if (id === "remove-behavior") {
+    if ((id === "remove-behavior" && behavior) || (id === "remove-folder" && target.folder)) {
       if (project.format !== "pml") return;
-      const prefix = `script:${behavior.id}:node`;
-      const hasDrafts = [...drafts.current.keys()].some(key => key.startsWith(prefix));
-      if (!confirm(`Remove "${behavior.name}" from the project? Its files stay on disk.${hasDrafts ? " Unapplied script changes will be discarded." : ""}`) || !valid()) return;
-      void change(() => authoring.removeBehavior(session, behavior.id)).then(result => {
-        if (!result) return;
-        for (const key of drafts.current.keys()) if (key.startsWith(prefix)) drafts.current.delete(key);
-        for (const panel of dockRef.current?.panels ?? [])
-          if ((panel.params?.kind === "graph" && panel.params.behaviorId === behavior.id) ||
-            (panel.params?.kind === "script" && panel.params.scriptId?.startsWith(prefix))) panel.api.close();
-      }); return;
+      const folder = behavior ? undefined : target.folder;
+      const behaviors = behavior ? [behavior] : project.behaviors.filter(b => b.source.startsWith(`${folder}/`));
+      const files = project.files.filter(f => folder && f.path.startsWith(`${folder}/`)).map(f => `file:${session}:${f.path}`);
+      const hasDrafts = [...drafts.current.keys()].some(key => files.includes(key) || behaviors.some(b => key.startsWith(`script:${b.id}:node`)));
+      setRemoval({target: {project, behaviorId: behavior?.id, folder}, warning: hasDrafts ? "Unapplied script and file changes in it will be discarded." : undefined});
+      setModal("remove"); return;
     }
+    if (!behavior) return;
     if (id === "export-crg") {
       void (async () => {
         const path = await saveFile({filters: [{name: "Behavior archive", extensions: ["crg"]}], defaultPath: `${behavior.name}.crg`});
@@ -935,7 +948,7 @@ export default function App() {
     },
     {
       id: "remove-behavior",
-      title: "Remove behavior from project",
+      title: "Remove behavior from project…",
       group: "File",
       enabled:
         isEditable && state.project?.format === "pml" && !!state.activeBehavior,
@@ -1856,6 +1869,8 @@ export default function App() {
           />
         )}
         {modal === "connection" && <Connection onClose={() => setModal(undefined)} onConnected={() => showPanel("robot")} />}
+        {modal === "remove" && removal && <RemoveContent target={removal.target} warning={removal.warning}
+          onClose={() => {setModal(undefined); setRemoval(undefined);}} onRemove={deleteFiles => removeContent(removal.target, deleteFiles)} />}
         {modal === "import" && <ImportContent initialDestination={importDestination} kind={importKind} onClose={() => setModal(undefined)} />}
         {modal === "new-behavior" && (
           <Modal
