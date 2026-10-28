@@ -228,3 +228,17 @@ fn manifest_round_trip_keeps_untouched_entries_and_finds_escaped_paths() {
     assert!(after.behaviors.unwrap().iter().any(|b| b.path.starts_with("Tom") && b.user_requestable));
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn rename_sets_the_package_name_and_undoes() {
+    let (root, mut p, mut h) = setup("rename");
+    edit::change_project(&mut p, &mut h, "Rename project", |p| p.rename(" Show & Tell ")).unwrap();
+    assert_eq!(p.name, "Show & Tell");
+    assert!(p.rename("  ").is_err());
+    p.save().unwrap();
+    let reopened = Project::open(&root.join("project/demo.pml")).unwrap();
+    assert_eq!(reopened.name, "Show & Tell");
+    edit::undo(&mut p, &mut h).unwrap();
+    assert_eq!(p.name, "demo");
+    fs::remove_dir_all(root).unwrap();
+}

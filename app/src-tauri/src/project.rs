@@ -233,6 +233,43 @@ pub fn project_remove_folder(sessions: State<Sessions>, session: u32, folder: St
     })
 }
 
+/// Renames or moves a project file or folder (behaviors included); files move on save.
+#[tauri::command]
+pub fn project_move_path(sessions: State<Sessions>, session: u32, from: String, to: String) -> Result<Changed, String> {
+    let parent = |p: &str| p.rsplit_once('/').map_or("", |(d, _)| d).to_string();
+    let label = if parent(&from) == parent(&to) { "Rename" } else { "Move" };
+    with(&sessions, session, |p, h| {
+        edit::change_project(p, h, label, |p| p.move_path(&from, &to))?;
+        Ok(changed(p, h, vec![]))
+    })
+}
+
+/// Copies a behavior next to itself as `<folder> copy`.
+#[tauri::command]
+pub fn project_duplicate_behavior(sessions: State<Sessions>, session: u32, behavior: String) -> Result<Changed, String> {
+    with(&sessions, session, |p, h| {
+        edit::change_project(p, h, "Duplicate behavior", |p| {
+            let source = p.behaviors.iter().find(|b| b.id == behavior).ok_or("Unknown behavior")?.source.clone();
+            let folder = p.copy_name(choren_core::project::behavior_files(&source));
+            p.duplicate_behavior(&behavior, &folder).map(|_| ())
+        })?;
+        Ok(changed(p, h, vec![]))
+    })
+}
+
+/// Moves a Project tree entry (`path`) or a behavior next to `target`.
+#[tauri::command]
+pub fn project_reorder(sessions: State<Sessions>, session: u32, path: Option<String>, behavior: Option<String>, target: String, after: bool) -> Result<Changed, String> {
+    with(&sessions, session, |p, h| {
+        edit::change_project(p, h, "Reorder", |p| match (&behavior, &path) {
+            (Some(id), _) => p.reorder_behavior(id, &target, after),
+            (None, Some(path)) => p.reorder(path, &target, after),
+            (None, None) => Err("Select what to move.".into()),
+        })?;
+        Ok(changed(p, h, vec![]))
+    })
+}
+
 /// The files that removing a behavior or folder with `delete_files` would delete on save.
 #[tauri::command]
 pub fn project_removal_files(sessions: State<Sessions>, session: u32, behavior: Option<String>, folder: Option<String>) -> Result<Vec<String>, String> {
@@ -242,6 +279,15 @@ pub fn project_removal_files(sessions: State<Sessions>, session: u32, behavior: 
 #[tauri::command]
 pub fn project_manifest(sessions: State<Sessions>, session: u32) -> Result<Option<Manifest>, String> {
     with(&sessions, session, |p, _| Ok(p.manifest_fields()))
+}
+
+/// Renames the project (its PML package name); written on save.
+#[tauri::command]
+pub fn project_rename(sessions: State<Sessions>, session: u32, name: String) -> Result<Changed, String> {
+    with(&sessions, session, |p, h| {
+        edit::change_project(p, h, "Rename project", |p| p.rename(&name))?;
+        Ok(changed(p, h, vec![]))
+    })
 }
 
 #[tauri::command]

@@ -47,6 +47,32 @@ export async function editorProject(page: Page, extraBehavior = false) {
           doc.files = doc.files.filter(f => !f.path.startsWith(`${args.folder}/`));
           return {document: structuredClone(doc), history: {revision: ++revision, dirty: true, undo: "Delete folder", created: []}};
         }
+        const changed = (undo: string) => ({document: structuredClone(doc), history: {revision: ++revision, dirty: true, undo, created: []}});
+        const inside = (path: string, prefix: string) => path === prefix || path.startsWith(`${prefix}/`);
+        if (command === "project_move_path") {
+          const map = (p: string) => inside(p, args.from) ? args.to + p.slice(args.from.length) : p;
+          for (const b of doc.behaviors) if (inside(b.source, args.from)) b.source = map(b.source);
+          for (const f of doc.files) f.path = map(f.path);
+          return changed("Move");
+        }
+        if (command === "project_rename") { doc.name = args.name; return changed("Rename project"); }
+        if (command === "project_duplicate_behavior") {
+          const copy = structuredClone(doc.behaviors.find(b => b.id === args.behavior)!);
+          copy.id = "b3"; copy.name = `${copy.name} copy`; copy.source = `${copy.source.split("/")[0]} copy/behavior.xar`;
+          doc.behaviors.push(copy);
+          doc.files.push({path: copy.source, kind: "behavior", behaviorId: copy.id});
+          return changed("Duplicate behavior");
+        }
+        if (command === "project_reorder") {
+          // Behaviors reorder by id; tree entries by their top-level folder.
+          const key = args.behavior ? (b: any) => b.id : (b: any) => b.source.split("/")[0];
+          const moving = args.behavior ?? args.path;
+          const order = doc.behaviors.map(key).filter((k: string) => k !== moving);
+          order.splice(order.indexOf(args.target) + (args.after ? 1 : 0), 0, moving);
+          doc.behaviors.sort((a, b) => order.indexOf(key(a)) - order.indexOf(key(b)));
+          doc.files.sort((a, b) => doc.behaviors.findIndex(x => x.id === a.behaviorId) - doc.behaviors.findIndex(x => x.id === b.behaviorId));
+          return changed("Reorder");
+        }
         if (command === "project_copy") {
           if ((window as any).holdCopy) await new Promise<void>(resolve => { (window as any).releaseCopy = resolve; });
           return '<Key frame="10" value="5"/>';

@@ -178,7 +178,7 @@ impl Project {
                 match content {
                     Content::Behavior => {
                         let (folder, xar) = path.rsplit_once('/').unwrap();
-                        p.list_behavior(folder, xar, &bytes)?;
+                        p.list_behavior(folder, xar, &bytes, None)?;
                         p.pending.remove(&path);
                     }
                     Content::Listed(l) => {

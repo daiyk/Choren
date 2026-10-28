@@ -121,6 +121,7 @@ import { Connection } from "./robot/Connection";
 import { VirtualMovementSpeed } from "./robot/panels";
 import { ImportContent, type ImportKind } from "./workspace/ImportContent";
 import { RemoveContent, type RemovalTarget } from "./workspace/RemoveContent";
+import { RenameContent, type RenameTarget } from "./workspace/RenameContent";
 import { UpdateDialog } from "./workspace/UpdateDialog";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { flushSync } from "react-dom";
@@ -259,6 +260,7 @@ export default function App() {
     | "connection"
     | "import"
     | "remove"
+    | "rename"
     | "welcome"
     | undefined
   >(() => (native && !getShareDir() && readPreference(WELCOME_KEY) !== "done" ? "welcome" : undefined));
@@ -266,6 +268,7 @@ export default function App() {
   const [importDestination, setImportDestination] = useState("");
   const [propertiesBehavior, setPropertiesBehavior] = useState<string>();
   const [removal, setRemoval] = useState<{target: RemovalTarget; warning?: string}>();
+  const [renaming, setRenaming] = useState<RenameTarget>();
   const [groupTarget, setGroupTarget] = useState<{project: ProjectDocument; address: GraphAddress; nodes: number[]}>();
   const [convertName, setConvertName] = useState("Box");
   const [behaviorForm, setBehaviorForm] = useState<{
@@ -400,6 +403,13 @@ export default function App() {
     savePreference(THEME_KEY, colorMode);
     return () => media.removeEventListener("change", update);
   }, [colorMode]);
+  useEffect(() => {
+    for (const panel of dockRef.current?.panels ?? []) {
+      if (panel.params?.kind !== "graph") continue;
+      const behavior = state.project?.behaviors.find(b => b.id === panel.params?.behaviorId);
+      if (behavior && panel.title !== behavior.name) panel.api.setTitle(behavior.name);
+    }
+  }, [state.project]);
   const targetedCommand = useRef<(id: string, target: CommandTarget) => void>(() => {});
   const execute = useCallback((id: string, target?: CommandTarget) => {
     if (target) { targetedCommand.current(id, target); return; }
@@ -864,7 +874,29 @@ export default function App() {
       setRemoval({target: {project, behaviorId: behavior?.id, folder}, warning: hasDrafts ? "Unapplied script and file changes in it will be discarded." : undefined});
       setModal("remove"); return;
     }
+    if (id === "rename-project") {
+      if (project.format !== "pml") return;
+      setRenaming({kind: "project"}); setModal("rename"); return;
+    }
+    if (id === "rename-folder" && target.folder) {
+      if (project.format !== "pml") return;
+      setRenaming({kind: "folder", path: target.folder}); setModal("rename"); return;
+    }
+    if (id === "rename-box" && target.address && target.boxId !== undefined) {
+      setRenaming({kind: "box", address: target.address, boxId: target.boxId}); setModal("rename"); return;
+    }
     if (!behavior) return;
+    if (id === "rename-behavior") {
+      if (project.format !== "pml") return;
+      setRenaming({kind: "behavior", behaviorId: behavior.id}); setModal("rename"); return;
+    }
+    if (id === "duplicate-behavior") {
+      if (project.format !== "pml") return;
+      void change(() => authoring.duplicateBehavior(session, behavior.id)).then(result => {
+        const added = result?.document.behaviors.find(b => !project.behaviors.some(o => o.id === b.id));
+        if (added) { openBehavior(added.id); setNotice(`Duplicated as ${added.name}. Save the project to write it.`); }
+      }); return;
+    }
     if (id === "export-crg") {
       void (async () => {
         const path = await saveFile({filters: [{name: "Behavior archive", extensions: ["crg"]}], defaultPath: `${behavior.name}.crg`});
@@ -956,6 +988,22 @@ export default function App() {
         ? "Select a behavior of a .pml project."
         : readOnlyReason,
       run: () => runTargeted("remove-behavior", {behaviorId: stateRef.current.activeBehavior}),
+    },
+    ...([["rename-behavior", "Rename behavior…"], ["duplicate-behavior", "Duplicate behavior"]] as const).map(([id, title]): Command => ({
+      id,
+      title,
+      group: "File",
+      enabled: isEditable && state.project?.format === "pml" && !!state.activeBehavior,
+      reason: isEditable ? "Select a behavior of a .pml project." : readOnlyReason,
+      run: () => runTargeted(id, {behaviorId: stateRef.current.activeBehavior}),
+    })),
+    {
+      id: "rename-project",
+      title: "Rename project…",
+      group: "File",
+      enabled: isEditable && state.project?.format === "pml",
+      reason: isEditable ? "Only .pml projects can be renamed." : readOnlyReason,
+      run: () => runTargeted("rename-project", {}),
     },
     {
       id: "properties",
@@ -1871,6 +1919,7 @@ export default function App() {
         {modal === "connection" && <Connection onClose={() => setModal(undefined)} onConnected={() => showPanel("robot")} />}
         {modal === "remove" && removal && <RemoveContent target={removal.target} warning={removal.warning}
           onClose={() => {setModal(undefined); setRemoval(undefined);}} onRemove={deleteFiles => removeContent(removal.target, deleteFiles)} />}
+        {modal === "rename" && renaming && <RenameContent target={renaming} onClose={() => {setModal(undefined); setRenaming(undefined);}} />}
         {modal === "import" && <ImportContent initialDestination={importDestination} kind={importKind} onClose={() => setModal(undefined)} />}
         {modal === "new-behavior" && (
           <Modal

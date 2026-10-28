@@ -646,6 +646,11 @@ kbd {
 .outline-owner {
   margin-left: 10px;
 }
+/* Drag and drop in the Project tree and Outline: a line before/after a row, or a folder highlight. */
+[data-drop="before"] { box-shadow: inset 0 2px 0 var(--accent); }
+[data-drop="after"] { box-shadow: inset 0 -2px 0 var(--accent); }
+[data-drop="into"], .panel-scroll[data-drop="root"] { background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 4px; }
+.file-tree [draggable="true"], .outline-owner summary[draggable="true"] { cursor: grab; }
 .outline-child {
   margin-left: 12px;
   border-left: 1px solid var(--border);
