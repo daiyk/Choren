@@ -4,6 +4,7 @@ import { Layouts } from "./workspace/Layouts";
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useReducer,
   useRef,
@@ -121,6 +122,8 @@ import { AboutDialog } from "./workspace/AboutDialog";
 import { Connection } from "./robot/Connection";
 import { VirtualMovementSpeed } from "./robot/panels";
 import { ImportContent, type ImportKind } from "./workspace/ImportContent";
+import { RemoveContent, type RemovalTarget } from "./workspace/RemoveContent";
+import { RenameContent, type RenameTarget } from "./workspace/RenameContent";
 import { UpdateDialog } from "./workspace/UpdateDialog";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { flushSync } from "react-dom";
@@ -183,7 +186,19 @@ function defaultLayout(api: DockviewApi) {
 function PanelTab(props: IDockviewPanelHeaderProps) {
   const ws = useWorkspace();
   const menu = useContextMenu([props.api.id, ws.state.activeBehavior, ws.state.project], message => ws.notify(message, "error"));
-  return <><DockviewDefaultTab {...props} tabIndex={0} {...menu.trigger(() => [
+  // The React default tab names every close button "Close tab"; name it after the panel, as
+  // dockview's own tab does, so each one is distinct ("Close Inspector").
+  const tab = useRef<HTMLDivElement>(null);
+  const [title, setTitle] = useState(props.api.title);
+  useEffect(() => {
+    const listener = props.api.onDidTitleChange(event => setTitle(event.title));
+    return () => listener.dispose();
+  }, [props.api]);
+  useLayoutEffect(() => {
+    tab.current?.querySelector(".dv-default-tab-action")?.setAttribute("aria-label", `Close ${title ?? props.api.id}`);
+  });
+  // React 19 passes `ref` through to the tab's root element.
+  return <><DockviewDefaultTab {...props} {...{ref: tab}} tabIndex={0} {...menu.trigger(() => [
     {label: props.api.isMaximized() ? "Restore panel" : "Maximize panel", run: () => props.api.isMaximized() ? props.api.exitMaximized() : props.api.maximize()},
     {label: "Move or resize…", run: () => ws.managePanel(props.api.id)},
     {label: "Close panel", run: () => props.api.close()},
@@ -258,6 +273,8 @@ export default function App() {
     | "new-behavior"
     | "connection"
     | "import"
+    | "remove"
+    | "rename"
     | "welcome"
     | "about"
     | undefined
@@ -265,6 +282,8 @@ export default function App() {
   const [importKind, setImportKind] = useState<ImportKind>("behavior");
   const [importDestination, setImportDestination] = useState("");
   const [propertiesBehavior, setPropertiesBehavior] = useState<string>();
+  const [removal, setRemoval] = useState<{target: RemovalTarget; warning?: string}>();
+  const [renaming, setRenaming] = useState<RenameTarget>();
   const [groupTarget, setGroupTarget] = useState<{project: ProjectDocument; address: GraphAddress; nodes: number[]}>();
   const [convertName, setConvertName] = useState("Box");
   const [behaviorForm, setBehaviorForm] = useState<{
@@ -399,6 +418,13 @@ export default function App() {
     savePreference(THEME_KEY, colorMode);
     return () => media.removeEventListener("change", update);
   }, [colorMode]);
+  useEffect(() => {
+    for (const panel of dockRef.current?.panels ?? []) {
+      if (panel.params?.kind !== "graph") continue;
+      const behavior = state.project?.behaviors.find(b => b.id === panel.params?.behaviorId);
+      if (behavior && panel.title !== behavior.name) panel.api.setTitle(behavior.name);
+    }
+  }, [state.project]);
   const targetedCommand = useRef<(id: string, target: CommandTarget) => void>(() => {});
   const execute = useCallback((id: string, target?: CommandTarget) => {
     if (target) { targetedCommand.current(id, target); return; }
@@ -447,7 +473,9 @@ export default function App() {
             ? 248
             : undefined,
       initialHeight: !peer && definition.region === "bottom" ? 230 : undefined,
-      minimumHeight: 100,
+      // The timeline's toolbars take ~120 px; keep the ruler and a layer row visible when the
+      // window shrinks to its 640 px minimum.
+      minimumHeight: id === "timeline" ? 190 : 100,
       minimumWidth: 180,
       // Documents share the center group with graphs, which use the "always" renderer.
       renderer: definition.region === "center" ? "always" : undefined,
@@ -819,6 +847,20 @@ export default function App() {
       if (active) openBehavior(active);
     }
   }, [openBehavior]);
+  const removeContent = async ({project, behaviorId, folder}: RemovalTarget, deleteFiles: boolean) => {
+    if (stateRef.current.project !== project) { setNotice("The project changed. Choose what to remove again.", "error"); return false; }
+    const result = await change(() => behaviorId ? authoring.removeBehavior(session, behaviorId, deleteFiles) : authoring.removeFolder(session, folder!, deleteFiles));
+    if (!result) return false;
+    const gone = project.behaviors.filter(b => !result.document.behaviors.some(r => r.id === b.id)).map(b => b.id);
+    const goneFiles = new Set(project.files.filter(f => !result.document.files.some(r => r.path === f.path)).map(f => `file:${session}:${f.path}`));
+    const removed = (key?: string) => !!key && gone.some(id => key.startsWith(`script:${id}:node`));
+    for (const key of [...drafts.current.keys()]) if (removed(key) || goneFiles.has(key)) drafts.current.delete(key);
+    draftListeners.current.forEach(listener => listener());
+    for (const panel of dockRef.current?.panels ?? [])
+      if ((panel.params?.kind === "graph" && gone.includes(panel.params.behaviorId)) || (panel.params?.kind === "script" && removed(panel.params.scriptId))) panel.api.close();
+    if (deleteFiles) setNotice("Removed. The files are deleted from disk when you save.");
+    return true;
+  };
   const runTargeted = (id: string, target: CommandTarget) => {
     const project = stateRef.current.project;
     if (!project) return;
@@ -840,18 +882,36 @@ export default function App() {
         setManifest(m); setModal("properties");
       }, fail); return;
     }
-    if (!behavior) return;
-    if (id === "remove-behavior") {
+    if ((id === "remove-behavior" && behavior) || (id === "remove-folder" && target.folder)) {
       if (project.format !== "pml") return;
-      const prefix = `script:${behavior.id}:node`;
-      const hasDrafts = [...drafts.current.keys()].some(key => key.startsWith(prefix));
-      if (!confirm(`Remove "${behavior.name}" from the project? Its files stay on disk.${hasDrafts ? " Unapplied script changes will be discarded." : ""}`) || !valid()) return;
-      void change(() => authoring.removeBehavior(session, behavior.id)).then(result => {
-        if (!result) return;
-        for (const key of drafts.current.keys()) if (key.startsWith(prefix)) drafts.current.delete(key);
-        for (const panel of dockRef.current?.panels ?? [])
-          if ((panel.params?.kind === "graph" && panel.params.behaviorId === behavior.id) ||
-            (panel.params?.kind === "script" && panel.params.scriptId?.startsWith(prefix))) panel.api.close();
+      const folder = behavior ? undefined : target.folder;
+      const behaviors = behavior ? [behavior] : project.behaviors.filter(b => b.source.startsWith(`${folder}/`));
+      const files = project.files.filter(f => folder && f.path.startsWith(`${folder}/`)).map(f => `file:${session}:${f.path}`);
+      const hasDrafts = [...drafts.current.keys()].some(key => files.includes(key) || behaviors.some(b => key.startsWith(`script:${b.id}:node`)));
+      setRemoval({target: {project, behaviorId: behavior?.id, folder}, warning: hasDrafts ? "Unapplied script and file changes in it will be discarded." : undefined});
+      setModal("remove"); return;
+    }
+    if (id === "rename-project") {
+      if (project.format !== "pml") return;
+      setRenaming({kind: "project"}); setModal("rename"); return;
+    }
+    if (id === "rename-folder" && target.folder) {
+      if (project.format !== "pml") return;
+      setRenaming({kind: "folder", path: target.folder}); setModal("rename"); return;
+    }
+    if (id === "rename-box" && target.address && target.boxId !== undefined) {
+      setRenaming({kind: "box", address: target.address, boxId: target.boxId}); setModal("rename"); return;
+    }
+    if (!behavior) return;
+    if (id === "rename-behavior") {
+      if (project.format !== "pml") return;
+      setRenaming({kind: "behavior", behaviorId: behavior.id}); setModal("rename"); return;
+    }
+    if (id === "duplicate-behavior") {
+      if (project.format !== "pml") return;
+      void change(() => authoring.duplicateBehavior(session, behavior.id)).then(result => {
+        const added = result?.document.behaviors.find(b => !project.behaviors.some(o => o.id === b.id));
+        if (added) { openBehavior(added.id); setNotice(`Duplicated as ${added.name}. Save the project to write it.`); }
       }); return;
     }
     if (id === "export-crg") {
@@ -937,7 +997,7 @@ export default function App() {
     },
     {
       id: "remove-behavior",
-      title: "Remove behavior from project",
+      title: "Remove behavior from project…",
       group: "File",
       enabled:
         isEditable && state.project?.format === "pml" && !!state.activeBehavior,
@@ -945,6 +1005,22 @@ export default function App() {
         ? "Select a behavior of a .pml project."
         : readOnlyReason,
       run: () => runTargeted("remove-behavior", {behaviorId: stateRef.current.activeBehavior}),
+    },
+    ...([["rename-behavior", "Rename behavior…"], ["duplicate-behavior", "Duplicate behavior"]] as const).map(([id, title]): Command => ({
+      id,
+      title,
+      group: "File",
+      enabled: isEditable && state.project?.format === "pml" && !!state.activeBehavior,
+      reason: isEditable ? "Select a behavior of a .pml project." : readOnlyReason,
+      run: () => runTargeted(id, {behaviorId: stateRef.current.activeBehavior}),
+    })),
+    {
+      id: "rename-project",
+      title: "Rename project…",
+      group: "File",
+      enabled: isEditable && state.project?.format === "pml",
+      reason: isEditable ? "Only .pml projects can be renamed." : readOnlyReason,
+      run: () => runTargeted("rename-project", {}),
     },
     {
       id: "properties",
@@ -1866,6 +1942,9 @@ export default function App() {
           />
         )}
         {modal === "connection" && <Connection onClose={() => setModal(undefined)} onConnected={() => showPanel("robot")} />}
+        {modal === "remove" && removal && <RemoveContent target={removal.target} warning={removal.warning}
+          onClose={() => {setModal(undefined); setRemoval(undefined);}} onRemove={deleteFiles => removeContent(removal.target, deleteFiles)} />}
+        {modal === "rename" && renaming && <RenameContent target={renaming} onClose={() => {setModal(undefined); setRenaming(undefined);}} />}
         {modal === "import" && <ImportContent initialDestination={importDestination} kind={importKind} onClose={() => setModal(undefined)} />}
         {modal === "new-behavior" && (
           <Modal

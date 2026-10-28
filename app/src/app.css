@@ -646,6 +646,11 @@ kbd {
 .outline-owner {
   margin-left: 10px;
 }
+/* Drag and drop in the Project tree and Outline: a line before/after a row, or a folder highlight. */
+[data-drop="before"] { box-shadow: inset 0 2px 0 var(--accent); }
+[data-drop="after"] { box-shadow: inset 0 -2px 0 var(--accent); }
+[data-drop="into"], .panel-scroll[data-drop="root"] { background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 4px; }
+.file-tree [draggable="true"], .outline-owner summary[draggable="true"] { cursor: grab; }
 .outline-child {
   margin-left: 12px;
   border-left: 1px solid var(--border);
@@ -1347,6 +1352,9 @@ dd {
   border-top: 1px solid var(--border);
   padding-top: 16px;
 }
+.dialog-actions button.danger:not(:disabled) {
+  color: var(--danger);
+}
 @media (max-width: 1150px) {
   .project-title {
     display: none;
@@ -1585,7 +1593,31 @@ textarea.inspector-field {
 }
 .project-import-menu button { display: flex; width: 100%; justify-content: flex-start; }
 
-.import-sources { max-height: 140px; overflow: auto; padding-left: 20px; overflow-wrap: anywhere; }
+.import-sources { max-height: 140px; overflow: auto; margin: 0; padding: 6px 10px 6px 26px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-raised); font-size: var(--font-small); line-height: 1.7; overflow-wrap: anywhere; }
+/* Import dialogs: source card, destination field with a live preview, one tip, then the footer. */
+.import-form { display: grid; gap: 16px; }
+.import-form p { margin: 0; }
+.import-lead { color: var(--muted); }
+.import-field { display: grid; gap: 6px; min-width: 0; }
+.import-label { font-size: var(--font-small); font-weight: 600; color: var(--muted); }
+.import-field input { width: 100%; }
+.import-source { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 8px 8px 8px 12px; border: 1px dashed var(--border); border-radius: 8px; background: var(--surface-raised); }
+.import-source.chosen { border-style: solid; }
+.import-source-icon { flex: none; color: var(--accent); }
+.import-source button { flex: none; margin-left: auto; }
+.import-source-empty { flex: 1; color: var(--subtle); }
+.import-source-list { flex: 1; min-width: 0; max-height: 110px; overflow: auto; margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.import-source-list li { display: grid; min-width: 0; }
+.import-source-list strong, .import-source-list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.import-source-list strong { font-weight: 600; }
+.import-source-list small { color: var(--muted); font-size: var(--font-small); }
+.import-hint { color: var(--muted); font-size: var(--font-small); overflow-wrap: anywhere; }
+.import-hint code { padding: 1px 5px; border-radius: 4px; background: var(--surface-raised); color: var(--text); font-size: var(--font-small); }
+.import-tip { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border-radius: 6px; background: color-mix(in srgb, var(--accent) 8%, var(--surface)); color: var(--muted); }
+.import-tip svg { flex: none; margin-top: 3px; color: var(--accent); }
+.dialog-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin: 4px -18px -18px; padding: 12px 18px; border-top: 1px solid var(--border); background: var(--surface-raised); border-radius: 0 0 10px 10px; }
+.dialog-note { margin-right: auto; color: var(--subtle); font-size: var(--font-small); }
+.dialog-footer button.danger:not(:disabled) { color: var(--danger); }
 .connection-summary { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--border); border-radius: 6px; overflow-wrap: anywhere; }
 .connection-choices { display: flex; gap: 20px; padding: 12px; border: 1px solid var(--border); border-radius: 6px; }
 .connection-choices label { display: flex; align-items: center; gap: 6px; }

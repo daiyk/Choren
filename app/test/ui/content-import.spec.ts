@@ -29,16 +29,18 @@ async function backend(page: Page, format = "pml") {
           }
           if (command === "project_import_files" || command === "project_import_behavior") {
             if ((window as any).failImport) throw new Error("Destination already exists. Choose a different destination.");
+            const behaviorFolder = command === "project_import_files" ? (window as any).folderBehavior : args.name;
             if (command === "project_import_files") {
               const names = args.folder ? ["media/nested/note.txt"] : args.paths.map((p: string) => p.split("/").pop());
               doc.files.push(...names.map((name: string) => ({ path: `${args.destination ? `${args.destination}/` : ""}${name}`, kind: "resource" })));
-            } else {
+            }
+            if (behaviorFolder) {
               const { openProject } = await import(/* @vite-ignore */ `${location.origin}/src/format/project.ts`);
-              const source = `${args.name}/behavior.xar`;
+              const source = `${behaviorFolder}/behavior.xar`;
               const xml = '<ChoregrapheProject><Box id="-1" name="Imported"><Timeline enable="0"><BehaviorLayer name="Flow"><BehaviorKeyframe name="Start" index="1"><Diagram/></BehaviorKeyframe></BehaviorLayer></Timeline></Box></ChoregrapheProject>';
               const imported = await openProject(`/project/${source}`, async () => new TextEncoder().encode(xml), async () => true);
-              doc.behaviors.push({ ...imported.behaviors[0], name: args.name, source });
-              doc.files.push({ path: source, kind: "behavior", behaviorId: imported.behaviors[0].id });
+              doc.behaviors.push({ ...imported.behaviors[0], id: `/project/${source}`, name: behaviorFolder, source });
+              doc.files.push({ path: source, kind: "behavior", behaviorId: `/project/${source}` });
             }
             return { history: { revision: calls.length, dirty: true, created: [] }, document: structuredClone(doc) };
           }
@@ -123,6 +125,27 @@ test("behavior import opens the added behavior without replacing the project", a
   await expect(page.locator(".project-heading")).toContainText("My project");
   await expect(page.locator(".breadcrumbs")).toContainText("Dance");
   expect(await page.evaluate(() => (window as any).calls.find((c: any) => c.command === "project_import_behavior").args)).toEqual({ session: 7, path: "/outside/Dance/behavior.xar", name: "Dance" });
+});
+
+test("folder import opens the behavior it brings and lists it in the Outline", async ({ page }) => {
+  await backend(page);
+  await page.evaluate(() => ((window as any).folderBehavior = "show/behavior_1"));
+  await page.getByRole("button", { name: "Import content", exact: true }).click();
+  await page.getByRole("button", { name: "Import folder…", exact: true }).click();
+  const folder = page.getByRole("dialog", { name: "Import folder", exact: true });
+  await expect(folder.locator(".import-tip")).toContainText("Each behavior.xar becomes a behavior");
+  await expect(folder.getByRole("button", { name: "Import folder", exact: true })).toBeDisabled();
+  await page.evaluate(() => (window as any).picks.push("/outside/show"));
+  await folder.getByRole("button", { name: "Choose folder…", exact: true }).click();
+  await expect(folder.getByRole("button", { name: "Choose folder…", exact: true })).toHaveText("Change…");
+  await folder.getByRole("textbox", { name: "Destination folder" }).fill("demos/");
+  await expect(folder.locator(".import-hint")).toHaveText("Imported as demos/show/");
+  await folder.getByRole("button", { name: "Import folder", exact: true }).click();
+  await expect(folder).toBeHidden();
+  await expect(page.locator(".notice")).toContainText("Folder imported with 1 behavior");
+  await expect(page.locator(".breadcrumbs")).toContainText("show/behavior_1");
+  await page.getByRole("tab", { name: "Outline", exact: true }).click();
+  await expect(page.locator(".outline-owner summary", { hasText: "show/behavior_1" })).toBeVisible();
 });
 
 test("imports explain the saved-project prerequisite", async ({ page }) => {

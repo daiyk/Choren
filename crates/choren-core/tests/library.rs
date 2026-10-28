@@ -235,3 +235,43 @@ fn tree_keeps_empty_folders_raw_paths_and_root_identity() {
     assert!(library::tree(&root.join("missing"), "user", true).is_err());
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn deleting_a_behavior_folder_happens_on_save_and_undoes() {
+    use choren_core::edit::{change_project, redo, undo};
+    use choren_core::project::{behavior_files, Listing};
+    let dir = tmp("delete-behavior");
+    let mut p = Project::create(&dir, "Del").unwrap();
+    std::fs::write(dir.join("behavior_1/extra.txt"), b"extra").unwrap();
+    std::fs::write(dir.join("behavior_1/keep.ogg"), b"keep").unwrap();
+    p.list(&Listing::new("Resources", r#"<File name="keep" src="behavior_1/keep.ogg" />"#.into(), "behavior_1/keep.ogg", "resource"), true).unwrap();
+    p.save().unwrap();
+    let mut h = History::fresh();
+    let (id, source) = (p.behaviors[0].id.clone(), p.behaviors[0].source.clone());
+    change_project(&mut p, &mut h, "Delete behavior", |p| {
+        p.remove_behavior(&mut History::fresh(), &id)?;
+        p.delete_path(behavior_files(&source))
+    }).unwrap();
+    assert_eq!(p.deleted.iter().map(String::as_str).collect::<Vec<_>>(), ["behavior_1/behavior.xar", "behavior_1/extra.txt"], "listed files are kept");
+    assert!(dir.join("behavior_1/extra.txt").exists(), "nothing is deleted before saving");
+    undo(&mut p, &mut h).unwrap();
+    assert!(p.deleted.is_empty() && p.pending.is_empty());
+    redo(&mut p, &mut h).unwrap();
+    p.save().unwrap();
+    assert!(!dir.join("behavior_1/behavior.xar").exists() && !dir.join("behavior_1/extra.txt").exists());
+    assert!(dir.join("behavior_1/keep.ogg").exists());
+    undo(&mut p, &mut h).unwrap();
+    p.save().unwrap();
+    assert_eq!(std::fs::read(dir.join("behavior_1/extra.txt")).unwrap(), b"extra", "undo after saving restores the files");
+    assert_eq!(Project::open(&dir.join("Del.pml")).unwrap().behaviors.len(), 1);
+
+    change_project(&mut p, &mut h, "Delete folder", |p| {
+        p.remove_folder(&mut History::fresh(), "behavior_1")?;
+        p.delete_path("behavior_1")
+    }).unwrap();
+    assert!(p.behaviors.is_empty() && !p.files.iter().any(|f| f.path.starts_with("behavior_1/")));
+    p.save().unwrap();
+    assert!(!dir.join("behavior_1").exists(), "the emptied folder goes too");
+    assert!(p.remove_folder(&mut History::fresh(), "../x").is_err());
+    std::fs::remove_dir_all(dir).unwrap();
+}

@@ -2,7 +2,7 @@
 
 use crate::view::{Diagnostic, ProjectFile};
 use crate::xml::{Doc, NodeId};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize)]
@@ -36,6 +36,8 @@ pub struct Project {
     pub manifest: Option<(String, Doc)>,
     /// Files staged for the next save (relative path → bytes), e.g. library attachments.
     pub pending: BTreeMap<String, Vec<u8>>,
+    /// Files deleted from disk on the next save (relative paths), e.g. a removed behavior's folder.
+    pub deleted: BTreeSet<String>,
     /// The PML/manifest or the behavior list changed outside the undo history.
     pub structure_dirty: bool,
     /// Non-behavior files of a `.crg` archive (relative path → bytes), kept for save-as-folder.
@@ -104,7 +106,7 @@ impl Project {
         };
         let bytes = std::fs::read(path).map_err(|e| format!("Cannot read {source}: {e}"))?;
         let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-        let mut p = Project { source: source.clone(), format, name: stem, behaviors: vec![], files: vec![], metadata: BTreeMap::new(), diagnostics: vec![], pml: None, manifest: None, pending: BTreeMap::new(), structure_dirty: false, archive: BTreeMap::new() };
+        let mut p = Project { source: source.clone(), format, name: stem, behaviors: vec![], files: vec![], metadata: BTreeMap::new(), diagnostics: vec![], pml: None, manifest: None, pending: BTreeMap::new(), deleted: BTreeSet::new(), structure_dirty: false, archive: BTreeMap::new() };
         match format {
             Format::Xar => {
                 let file = path.file_name().unwrap().to_string_lossy().to_string();
@@ -129,7 +131,9 @@ impl Project {
     }
 
     fn push_behavior(&mut self, name: String, file: String, bytes: &[u8]) -> Result<(), String> {
-        let id = format!("{}::{file}", self.source);
+        // A moved behavior keeps its id, so a new behavior at its old path needs another one.
+        let base = format!("{}::{file}", self.source);
+        let id = (1..).map(|i| if i == 1 { base.clone() } else { format!("{base}#{i}") }).find(|id| !self.behaviors.iter().any(|b| &b.id == id)).unwrap();
         self.behaviors.push(Behavior { id: id.clone(), name, source: file.clone(), doc: parse_xar(&file, bytes)? });
         self.files.push(ProjectFile { behavior_id: Some(id), ..ProjectFile::new(file, "behavior") });
         Ok(())
@@ -244,6 +248,21 @@ impl Project {
         for (rel, bytes) in &self.pending {
             put(rel, bytes)?;
         }
+        let mut folders = BTreeSet::new();
+        for rel in self.deleted.clone() {
+            if !self.listed(&rel) {
+                match std::fs::remove_file(dir.join(&rel)) {
+                    Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(format!("Cannot delete {rel}: {e}")),
+                    _ => {}
+                }
+                folders.extend(Path::new(&rel).ancestors().skip(1).filter(|d| !d.as_os_str().is_empty()).map(Path::to_path_buf));
+            }
+            self.deleted.remove(&rel);
+        }
+        // Deepest first; folders that still hold other files stay.
+        for folder in folders.iter().rev() {
+            let _ = std::fs::remove_dir(dir.join(folder));
+        }
         if self.structure_dirty {
             if let Some(pml) = &self.pml {
                 let name = Path::new(&self.source).file_name().unwrap().to_string_lossy().to_string();
@@ -260,7 +279,7 @@ impl Project {
 
     pub fn state(&self, h: &crate::edit::History, created: Vec<usize>) -> crate::edit::HistoryState {
         let mut s = h.state(created);
-        s.dirty |= self.structure_dirty || !self.pending.is_empty();
+        s.dirty |= self.structure_dirty || !self.pending.is_empty() || !self.deleted.is_empty();
         s
     }
 
@@ -436,6 +455,7 @@ impl Project {
 
     /// Reads a project file: staged contents first, then the archive, then the project folder.
     pub fn read_file(&self, rel: &str) -> Option<Vec<u8>> {
+        if self.deleted.contains(rel) { return None; }
         self.pending.get(rel).or_else(|| self.archive.get(rel)).cloned().or_else(|| std::fs::read(self.root_dir()?.join(rel)).ok())
     }
 
@@ -444,9 +464,14 @@ impl Project {
         let on_disk = self.root_dir().and_then(|d| std::fs::read(d.join(rel)).ok());
         match content {
             Some(c) if Some(&c) != on_disk.as_ref() => {
+                self.deleted.remove(rel);
                 self.pending.insert(rel.to_string(), c);
             }
-            _ => {
+            Some(_) => {
+                self.deleted.remove(rel);
+                self.pending.remove(rel);
+            }
+            None => {
                 self.pending.remove(rel);
             }
         }
@@ -510,17 +535,27 @@ impl Project {
         if folder.contains(['\\', '/', '<', '>', ':', '"', '|', '?', '*']) || dir.join(&folder).exists() || self.behaviors.iter().any(|b| b.name == folder) {
             return Err(format!("A behavior named \"{folder}\" already exists or the name is invalid."));
         }
+        self.list_behavior(&folder, "behavior.xar", crate::templates::behavior(root).as_bytes(), None)?;
+        Ok(self.behaviors.last().unwrap().id.clone())
+    }
+
+    /// Lists the behavior document `<folder>/<xar>` in the PML and the manifest (written on save),
+    /// with a copy of the `<behaviorContent>` element `content` when given.
+    pub(crate) fn list_behavior(&mut self, folder: &str, xar: &str, bytes: &[u8], content: Option<&str>) -> Result<(), String> {
+        let e = crate::xml::escape_attr;
         let sec = self.pml_section("BehaviorDescriptions")?;
-        crate::edit::insert_raw(self.pml.as_mut().unwrap(), sec, &format!("<BehaviorDescription name=\"behavior\" src=\"{}\" xar=\"behavior.xar\" />", crate::xml::escape_attr(&folder)))?;
+        crate::edit::insert_raw(self.pml.as_mut().unwrap(), sec, &format!("<BehaviorDescription name=\"behavior\" src=\"{}\" xar=\"{}\" />", e(folder), e(xar)))?;
         if let Some((_, m)) = self.manifest.as_mut() {
             let root = m.root().unwrap();
             let contents = match m.kid(root, "contents") { Some(c) => c, None => crate::edit::insert_raw(m, root, "<contents />")? };
-            crate::edit::insert_raw(m, contents, &format!("<behaviorContent path=\"{}\">\n    <nature>interactive</nature>\n    <permissions/>\n</behaviorContent>", crate::xml::escape_attr(&folder)))?;
+            match content {
+                Some(xml) => { let n = crate::edit::insert_raw(m, contents, xml)?; crate::edit::set_raw(m, n, "path", folder); }
+                None => { crate::edit::insert_raw(m, contents, &format!("<behaviorContent path=\"{}\">\n    <nature>interactive</nature>\n    <permissions/>\n</behaviorContent>", e(folder)))?; }
+            }
         }
-        let file = format!("{folder}/behavior.xar");
-        self.push_behavior(folder, file, crate::templates::behavior(root).as_bytes())?;
+        self.push_behavior(folder.to_string(), format!("{folder}/{xar}"), bytes)?;
         self.structure_dirty = true;
-        Ok(self.behaviors.last().unwrap().id.clone())
+        Ok(())
     }
 
     /// Removes a behavior from the project lists. Its files stay on disk (never deleted silently).
@@ -550,6 +585,57 @@ impl Project {
         Ok(())
     }
 
+    /// Removes everything listed under `folder`: behaviors, resources, dialogs, topics and
+    /// translations. Files stay on disk unless `delete_path` marks them too.
+    pub fn remove_folder(&mut self, h: &mut crate::edit::History, folder: &str) -> Result<(), String> {
+        let folder = relative(folder)?;
+        let inside = |path: &str| path.strip_prefix(folder.as_str()).is_some_and(|rest| rest.starts_with('/'));
+        if self.files.iter().any(|f| matches!(f.kind, "project" | "manifest") && inside(&f.path)) {
+            return Err("This folder holds the project file or its manifest.".into());
+        }
+        for id in self.behaviors.iter().filter(|b| inside(&b.source)).map(|b| b.id.clone()).collect::<Vec<_>>() {
+            self.remove_behavior(h, &id)?;
+        }
+        for f in self.files.iter().filter(|f| inside(&f.path)).cloned().collect::<Vec<_>>() {
+            let section = match f.kind { "resource" => "Resources", "dialog" => "Dialogs", "topic" => "Topics", "translation" => "Translations", _ => continue };
+            self.list(&Listing::new(section, String::new(), &f.path, f.kind), false)?;
+            self.pending.remove(&f.path);
+        }
+        Ok(())
+    }
+
+    /// Marks `rel` (a file or a folder) for deletion on the next save. Files the project still
+    /// lists are kept, so remove their listings first.
+    pub fn delete_path(&mut self, rel: &str) -> Result<(), String> {
+        let rel = relative(rel)?;
+        let dir = self.root_dir().ok_or("Deleting files needs a project folder")?;
+        let mut checked = dir.clone();
+        for component in rel.split('/').collect::<Vec<_>>().split_last().unwrap().1 {
+            checked.push(component);
+            if checked.is_symlink() { return Err("Cannot delete files through a symbolic link.".into()); }
+        }
+        let mut found = vec![];
+        collect_files(&dir, &rel, &mut found);
+        found.extend(self.pending.keys().filter(|k| *k == &rel || k.starts_with(&format!("{rel}/"))).cloned());
+        for path in found {
+            if self.listed(&path) { continue; }
+            self.pending.remove(&path);
+            self.deleted.insert(path);
+        }
+        Ok(())
+    }
+
+    /// The files `delete_path` would add (and a following save delete), without changing anything.
+    pub fn deletion_preview(&self, work: impl FnOnce(&mut Project) -> Result<(), String>) -> Result<Vec<String>, String> {
+        let mut after = self.clone();
+        work(&mut after)?;
+        Ok(after.deleted.difference(&self.deleted).cloned().collect())
+    }
+
+    fn listed(&self, path: &str) -> bool {
+        self.files.iter().any(|f| f.path == path) || self.behaviors.iter().any(|b| b.source == path)
+    }
+
     /// Renames a listed resource and its structured box references. Old files stay on disk.
     pub fn rename_resource(&mut self, path: &str, target: &str) -> Result<(), String> {
         let target = relative(target)?;
@@ -571,6 +657,16 @@ impl Project {
                 crate::edit::set_raw(pml, n, "src", &target);
             }
         }
+        self.retarget_resource(path, &target);
+        for f in &mut self.files { if f.path == path { f.path = target.clone(); } }
+        self.pending.remove(path);
+        self.stage(&target, Some(bytes));
+        self.structure_dirty = true;
+        Ok(())
+    }
+
+    /// Points resource parameters and bitmaps that name `path` (bare or `/`-prefixed) at `target`.
+    fn retarget_resource(&mut self, path: &str, target: &str) {
         for behavior in &mut self.behaviors {
             let d = &mut behavior.doc;
             for n in 0..d.nodes.len() {
@@ -586,18 +682,215 @@ impl Project {
                 }
                 if d.is_el(n, "bitmap") && (d.text(n) == path || d.text(n) == format!("/{path}")) {
                     let value = format!("{}{target}", if d.text(n).starts_with('/') { "/" } else { "" });
-                    for child in d.el(n).children.clone() { d.nodes[child].parent = None; }
-                    let text = d.new_text(crate::xml::escape_text(&value));
-                    d.nodes[text].parent = Some(n);
-                    d.el_mut(n).children = vec![text];
+                    set_text(d, n, &value);
                 }
             }
         }
-        for f in &mut self.files { if f.path == path { f.path = target.clone(); } }
-        self.pending.remove(path);
-        self.stage(&target, Some(bytes));
+    }
+
+    /// Whether `path`, or anything under it, is listed, staged or on disk (ignoring case, which
+    /// macOS and Windows folders do).
+    pub fn path_taken(&self, path: &str) -> bool {
+        let lower = path.to_lowercase();
+        self.files.iter().map(|f| &f.path).chain(self.pending.keys()).any(|p| under(&p.to_lowercase(), &lower))
+            || self.root_dir().is_some_and(|dir| std::fs::symlink_metadata(dir.join(path)).is_ok())
+    }
+
+    /// Moves (renames) the file or folder `from` to `to` with every project entry under it: PML
+    /// and manifest entries, behavior paths, `dialogFile`s (relative to their behavior) and
+    /// resource references (as `rename_resource`). Behaviors keep their id, so open tabs, drafts
+    /// and undo steps follow them. Files on disk, listed or not, move on the next save.
+    pub fn move_path(&mut self, from: &str, to: &str) -> Result<(), String> {
+        let (from, to) = (relative(from)?, relative(to)?);
+        let root = self.root_dir().filter(|_| self.pml.is_some()).ok_or("Moving files needs a .pml project folder")?;
+        if from == to { return Err("Choose a different name or folder.".into()); }
+        if under(&to, &from) { return Err("A folder cannot move into itself.".into()); }
+        let moved: Vec<ProjectFile> = self.files.iter().filter(|f| under(&f.path, &from)).cloned().collect();
+        if moved.is_empty() { return Err(format!("Nothing in the project is at {from}.")); }
+        if moved.iter().any(|f| matches!(f.kind, "project" | "manifest")) { return Err("The project file and its manifest cannot move.".into()); }
+        if self.behaviors.iter().any(|b| b.source == from) { return Err("Move or rename the behavior's folder, not its .xar file.".into()); }
+        if from.to_lowercase() == to.to_lowercase() { return Err("Names that differ only in capitalization cannot be renamed here.".into()); }
+        if self.path_taken(&to) { return Err(format!("{to} already exists. Choose another name.")); }
+        for path in [&from, &to] {
+            let mut checked = root.clone();
+            for component in path.split('/') {
+                checked.push(component);
+                if checked.is_symlink() { return Err("Paths with symbolic links cannot move.".into()); }
+            }
+        }
+        let map = |p: &str| if under(p, &from) { format!("{to}{}", &p[from.len()..]) } else { p.to_string() };
+        // Behavior documents are written from memory; every other file is copied and the old one
+        // deleted on save, so undo before saving changes nothing on disk.
+        let mut disk = vec![];
+        collect_files(&root, &from, &mut disk);
+        disk.extend(self.pending.keys().filter(|k| under(k, &from)).cloned());
+        disk.sort();
+        disk.dedup();
+        for path in disk {
+            if !self.behaviors.iter().any(|b| b.source == path) {
+                if let Some(bytes) = self.read_file(&path) { self.pending.insert(map(&path), bytes); }
+            }
+            self.pending.remove(&path);
+            self.deleted.insert(path);
+        }
+        let pml = self.pml.as_mut().unwrap();
+        let pkg = pml.root().unwrap();
+        for section in ["BehaviorDescriptions", "Resources", "Dialogs", "Topics", "Translations"] {
+            let Some(sec) = pml.kid(pkg, section) else { continue };
+            for n in pml.el(sec).children.clone() {
+                if !matches!(pml.nodes[n].kind, crate::xml::Kind::Element(_)) { continue; }
+                if let Some(src) = pml.attr(n, "src").and_then(|s| relative(&s).ok()).filter(|s| under(s, &from)) {
+                    crate::edit::set_raw(pml, n, "src", &map(&src));
+                }
+            }
+        }
+        if let Some((_, m)) = self.manifest.as_mut() {
+            let root = m.root().unwrap();
+            if let Some(c) = m.kid(root, "contents") {
+                for d in m.kids(c, "behaviorContent").collect::<Vec<_>>() {
+                    if let Some(path) = m.attr(d, "path").filter(|p| under(p, &from)) { crate::edit::set_raw(m, d, "path", &map(&path)); }
+                }
+            }
+        }
+        for b in &mut self.behaviors {
+            let old = b.source.clone();
+            if under(&old, &from) {
+                b.source = map(&old);
+                b.name = behavior_files(&b.source).to_string();
+            }
+            let d = &mut b.doc;
+            for n in 0..d.nodes.len() {
+                if d.nodes[n].parent.is_none() || !d.is_el(n, "dialogFile") { continue; }
+                let value = d.text(n);
+                let Ok(target) = from_behavior(&old, &value) else { continue };
+                let next = to_behavior(&b.source, &map(&target));
+                if next != value { set_text(d, n, &next); }
+            }
+        }
+        for f in moved.iter().filter(|f| f.kind == "resource") { self.retarget_resource(&f.path, &map(&f.path)); }
+        for f in &mut self.files { if under(&f.path, &from) { f.path = map(&f.path); } }
         self.structure_dirty = true;
         Ok(())
+    }
+
+    /// A free sibling folder name for a copy of `folder`: `<folder> copy`, `<folder> copy 2`, …
+    pub fn copy_name(&self, folder: &str) -> String {
+        (1..).map(|i| if i == 1 { format!("{folder} copy") } else { format!("{folder} copy {i}") }).find(|f| !self.path_taken(f)).unwrap()
+    }
+
+    /// Copies the behavior `id` into the sibling folder `folder`: its current document, its
+    /// manifest properties, and every file in its folder with its PML entry. Returns the new id.
+    pub fn duplicate_behavior(&mut self, id: &str, folder: &str) -> Result<String, String> {
+        let folder = relative(folder)?;
+        let root = self.root_dir().filter(|_| self.pml.is_some()).ok_or("This operation needs a .pml project")?;
+        let b = self.behaviors.iter().find(|b| b.id == id).ok_or("Unknown behavior")?;
+        let (old, xar) = b.source.rsplit_once('/').map(|(d, x)| (d.to_string(), x.to_string())).ok_or("A behavior at the project root cannot be copied. Move it into a folder first.")?;
+        let text = b.doc.write();
+        if folder.rsplit_once('/').map(|p| p.0) != old.rsplit_once('/').map(|p| p.0) { return Err("A copy goes next to the original behavior.".into()); }
+        if self.path_taken(&folder) { return Err(format!("{folder} already exists. Choose another name.")); }
+        let map = |p: &str| format!("{folder}{}", &p[old.len()..]);
+        let pml = self.pml.as_ref().unwrap();
+        let pkg = pml.root().unwrap();
+        let mut entries = vec![];
+        for section in ["Resources", "Dialogs", "Topics"] {
+            let Some(sec) = pml.kid(pkg, section) else { continue };
+            for &n in &pml.el(sec).children {
+                if !matches!(pml.nodes[n].kind, crate::xml::Kind::Element(_)) { continue; }
+                if let Some(src) = pml.attr(n, "src").and_then(|s| relative(&s).ok()).filter(|s| under(s, &old)) {
+                    let kind = self.files.iter().find(|f| f.path == src).map_or("resource", |f| f.kind);
+                    entries.push((section, pml.subtree_string(n), map(&src), kind));
+                }
+            }
+        }
+        let content = self.manifest.as_ref().and_then(|(_, m)| {
+            let c = m.kid(m.root()?, "contents")?;
+            m.kids(c, "behaviorContent").find(|&d| m.attr(d, "path").as_deref() == Some(old.as_str())).map(|d| m.subtree_string(d))
+        });
+        let source = format!("{old}/{xar}");
+        let mut disk = vec![];
+        collect_files(&root, &old, &mut disk);
+        disk.extend(self.pending.keys().filter(|k| under(k, &old)).cloned());
+        disk.sort();
+        disk.dedup();
+        for path in disk.into_iter().filter(|p| *p != source) {
+            if let Some(bytes) = self.read_file(&path) { self.pending.insert(map(&path), bytes); }
+        }
+        for (section, xml, src, kind) in entries {
+            let sec = self.pml_section(section)?;
+            let pml = self.pml.as_mut().unwrap();
+            let n = crate::edit::insert_raw(pml, sec, &xml)?;
+            crate::edit::set_raw(pml, n, "src", &src);
+            self.files.push(ProjectFile { missing: Some(false), ..ProjectFile::new(src, kind) });
+        }
+        self.list_behavior(&folder, &xar, text.as_bytes(), content.as_deref())?;
+        Ok(self.behaviors.last().unwrap().id.clone())
+    }
+
+    /// Moves the Project tree entry `path` (a file or folder) before or `after` its sibling
+    /// `target`. Each PML section, the manifest contents and the file list reorder only the
+    /// entries under their folder, in the positions those already hold.
+    pub fn reorder(&mut self, path: &str, target: &str, after: bool) -> Result<(), String> {
+        let parent = |p: &str| p.rsplit_once('/').map_or(String::new(), |(d, _)| d.to_string());
+        let dir = parent(path);
+        if path == target || dir != parent(target) { return Err("Drop it next to an entry in the same folder.".into()); }
+        // Siblings in the order the Project tree shows them.
+        let mut files: Vec<&ProjectFile> = self.files.iter().collect();
+        files.sort_by_key(|f| kind_rank(f.kind));
+        let mut order: Vec<String> = vec![];
+        for f in files {
+            if let Some(c) = child_of(&dir, &f.path) { if !order.contains(&c) { order.push(c); } }
+        }
+        let (moving, at) = (child_of(&dir, path), child_of(&dir, target));
+        let (Some(moving), Some(at)) = (moving.filter(|m| order.contains(m)), at.filter(|a| order.contains(a))) else { return Err("Nothing in the project is there.".into()) };
+        order.retain(|c| *c != moving);
+        let i = order.iter().position(|c| *c == at).unwrap() + after as usize;
+        order.insert(i, moving);
+        self.apply_order(|p| child_of(&dir, p).and_then(|c| order.iter().position(|o| *o == c)));
+        Ok(())
+    }
+
+    /// Moves the behavior `id` before or `after` the behavior `target` in the project's behavior
+    /// order (PML, manifest and behavior list).
+    pub fn reorder_behavior(&mut self, id: &str, target: &str, after: bool) -> Result<(), String> {
+        let source = |id: &str| self.behaviors.iter().find(|b| b.id == id).map(|b| b.source.clone()).ok_or("Unknown behavior");
+        let (moving, at) = (source(id)?, source(target)?);
+        if moving == at { return Err("Drop it on another behavior.".into()); }
+        let mut order: Vec<String> = self.behaviors.iter().map(|b| b.source.clone()).filter(|s| *s != moving).collect();
+        let i = order.iter().position(|s| *s == at).unwrap() + after as usize;
+        order.insert(i, moving);
+        let folders: Vec<String> = order.iter().map(|s| behavior_files(s).to_string()).collect();
+        self.apply_order(|p| order.iter().position(|s| s == p).or_else(|| folders.iter().position(|f| f == p)));
+        Ok(())
+    }
+
+    /// Sorts, stably by `rank`, the entries (by project path) for which it is `Some`, in the
+    /// positions they hold: PML sections, manifest contents, behaviors and files.
+    fn apply_order(&mut self, rank: impl Fn(&str) -> Option<usize>) {
+        if let Some(pml) = self.pml.as_mut() {
+            let pkg = pml.root().unwrap();
+            for section in ["BehaviorDescriptions", "Resources", "Dialogs", "Topics", "Translations"] {
+                let Some(sec) = pml.kid(pkg, section) else { continue };
+                let children = pml.el(sec).children.clone();
+                let keys: Vec<_> = children.iter().map(|&n| {
+                    if !matches!(pml.nodes[n].kind, crate::xml::Kind::Element(_)) { return None; }
+                    let src = relative(&pml.attr(n, "src")?).ok()?;
+                    rank(&if section == "BehaviorDescriptions" { format!("{src}/{}", pml.attr_or(n, "xar")) } else { src })
+                }).collect();
+                pml.el_mut(sec).children = permute(children, &keys);
+            }
+        }
+        if let Some((_, m)) = self.manifest.as_mut() {
+            if let Some(c) = m.root().and_then(|r| m.kid(r, "contents")) {
+                let children = m.el(c).children.clone();
+                let keys: Vec<_> = children.iter().map(|&n| m.is_el(n, "behaviorContent").then(|| m.attr(n, "path")).flatten().and_then(|p| rank(&p))).collect();
+                m.el_mut(c).children = permute(children, &keys);
+            }
+        }
+        let keys: Vec<_> = self.behaviors.iter().map(|b| rank(&b.source)).collect();
+        self.behaviors = permute(std::mem::take(&mut self.behaviors), &keys);
+        let keys: Vec<_> = self.files.iter().map(|f| rank(&f.path)).collect();
+        self.files = permute(std::mem::take(&mut self.files), &keys);
+        self.structure_dirty = true;
     }
 
     pub fn remove_resource(&mut self, path: &str) -> Result<(), String> {
@@ -620,6 +913,17 @@ impl Project {
             robots: m.kids(r, "robotRequirement").map(|n| RobotRequirement { model: m.attr_or(n, "model"), min_head_version: m.attr_or(n, "minHeadVersion"), max_head_version: m.attr_or(n, "maxHeadVersion"), min_body_version: m.attr_or(n, "minBodyVersion"), max_body_version: m.attr_or(n, "maxBodyVersion") }).collect(),
         });
         Some(Manifest { descriptions, uuid: m.attr_or(root, "uuid"), version: m.attr_or(root, "version"), names, supported_languages: langs("supportedLanguages"), behaviors, requirements: Some(requirements) })
+    }
+
+    /// Sets the project name (the PML `Package` name); the `.pml` file keeps its name.
+    pub fn rename(&mut self, name: &str) -> Result<(), String> {
+        let name = name.trim();
+        if name.is_empty() { return Err("Enter a project name.".into()); }
+        let pml = self.pml.as_mut().ok_or("This operation needs a .pml project")?;
+        let root = pml.root().unwrap();
+        crate::edit::set_raw(pml, root, "name", name);
+        self.name = name.into();
+        Ok(())
     }
 
     /// Updates uuid, version and titles (per language). Other manifest content is preserved.
@@ -878,6 +1182,67 @@ fn set_requirements(m: &mut Doc, root: NodeId, r: &Requirements) -> Result<(), S
 
 /// Writes `<dir>/<name>.pml`, `manifest.xml`, the behavior folders (`folder/behavior.xar`) and
 /// resource files, refusing to overwrite an existing project.
+/// Collects the files at or under `rel` (symbolic links count as files and are never followed).
+fn collect_files(root: &Path, rel: &str, out: &mut Vec<String>) {
+    let path = root.join(rel);
+    let Ok(meta) = std::fs::symlink_metadata(&path) else { return };
+    if !meta.is_dir() { return out.push(rel.to_string()); }
+    for entry in std::fs::read_dir(&path).into_iter().flatten().flatten() {
+        if let Some(name) = entry.file_name().to_str() { collect_files(root, &format!("{rel}/{name}"), out); }
+    }
+}
+
+/// `path` is `prefix` or inside the folder `prefix`.
+fn under(path: &str, prefix: &str) -> bool {
+    path.strip_prefix(prefix).is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+}
+
+/// The name of the child of folder `dir` (`""`: the project root) that `path` is or lies in.
+fn child_of(dir: &str, path: &str) -> Option<String> {
+    let rest = if dir.is_empty() { path } else { path.strip_prefix(dir)?.strip_prefix('/')? };
+    rest.split('/').next().filter(|c| !c.is_empty()).map(str::to_string)
+}
+
+/// The Project tree groups files by kind in PML section order, as reopening the project lists them.
+pub fn kind_rank(kind: &str) -> usize {
+    ["project", "behavior", "resource", "dialog", "topic", "translation", "manifest"].iter().position(|k| *k == kind).unwrap_or(6)
+}
+
+/// Puts the items with a key in key order (stable) within the positions they hold.
+fn permute<T>(items: Vec<T>, keys: &[Option<usize>]) -> Vec<T> {
+    let slots: Vec<usize> = (0..items.len()).filter(|&i| keys[i].is_some()).collect();
+    let mut sorted = slots.clone();
+    sorted.sort_by_key(|&i| (keys[i], i));
+    let mut source: Vec<usize> = (0..items.len()).collect();
+    for (&slot, from) in slots.iter().zip(sorted) { source[slot] = from; }
+    let mut items: Vec<Option<T>> = items.into_iter().map(Some).collect();
+    source.into_iter().map(|i| items[i].take().unwrap()).collect()
+}
+
+/// Replaces an element's content with the text `value`.
+fn set_text(d: &mut Doc, n: NodeId, value: &str) {
+    for child in d.el(n).children.clone() { d.nodes[child].parent = None; }
+    let text = d.new_text(crate::xml::escape_text(value));
+    d.nodes[text].parent = Some(n);
+    d.el_mut(n).children = vec![text];
+}
+
+/// The project path `target` relative to the folder of the behavior file `behavior`; the
+/// inverse of `from_behavior`.
+pub fn to_behavior(behavior: &str, target: &str) -> String {
+    let dir: Vec<&str> = behavior.rsplit_once('/').map_or(vec![], |(d, _)| d.split('/').collect());
+    let parts: Vec<&str> = target.split('/').collect();
+    let common = dir.iter().zip(&parts).take_while(|(a, b)| a == b).count().min(parts.len() - 1);
+    let mut out = vec![".."; dir.len() - common];
+    out.extend(&parts[common..]);
+    out.join("/")
+}
+
+/// The folder holding a behavior's files, or its `.xar` alone when it sits at the project root.
+pub fn behavior_files(source: &str) -> &str {
+    source.rsplit_once('/').map_or(source, |(dir, _)| dir)
+}
+
 pub fn write_folder(dir: &Path, name: &str, behaviors: &[(String, Vec<u8>)], resources: &[(String, Vec<u8>)]) -> Result<(), String> {
     if name.is_empty() || name.contains(['\\', '/', '<', '>', ':', '"', '|', '?', '*']) {
         return Err("Can not contain any of these characters: \\ / < > : \" | ? *".into());

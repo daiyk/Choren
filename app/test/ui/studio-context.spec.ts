@@ -8,12 +8,28 @@ test("Project actions export and remove the clicked inactive behavior", async ({
   await menu(page).getByRole("menuitem", {name: "Export behavior…"}).click();
   await expect.poll(() => calls(page, "project_export_crg")).toEqual([{session: 7, behavior: "b2", path: "/p/export.crg"}]);
   await expect(page.getByRole("navigation", {name: "Diagram path"})).toContainText("Editor behavior");
-  page.once("dialog", dialog => dialog.accept());
   await otherFile.click({button: "right"});
-  await menu(page).getByRole("menuitem", {name: "Remove behavior from project…"}).click();
-  await expect.poll(() => calls(page, "project_remove_behavior")).toEqual([{session: 7, behavior: "b2"}]);
+  await menu(page).getByRole("menuitem", {name: "Delete behavior…"}).click();
+  const dialog = page.getByRole("dialog", {name: "Delete behavior"});
+  await expect(dialog.getByRole("list", {name: "Files to delete"})).toContainText("other/notes.txt");
+  await dialog.getByRole("button", {name: "Remove from project, keep files"}).click();
+  await expect.poll(() => calls(page, "project_remove_behavior")).toEqual([{session: 7, behavior: "b2", deleteFiles: false}]);
   await expect(otherFile).toHaveCount(0);
+  await expect(dialog).toHaveCount(0);
   await expect(page.getByRole("navigation", {name: "Diagram path"})).toContainText("Editor behavior");
+});
+
+test("Project folders can be deleted with their files", async ({page}) => {
+  await editorProject(page, true);
+  await page.locator(".file-tree summary", {hasText: /^other$/}).click({button: "right"});
+  await menu(page).getByRole("menuitem", {name: "Delete folder…"}).click();
+  const dialog = page.getByRole("dialog", {name: "Delete folder"});
+  await expect(dialog.getByRole("list", {name: "Project entries"})).toContainText("other/behavior.xar");
+  await expect(dialog.getByRole("list", {name: "Files to delete"})).toContainText("other/notes.txt");
+  await dialog.getByRole("button", {name: "Delete files too"}).click();
+  await expect.poll(() => calls(page, "project_remove_folder")).toEqual([{session: 7, folder: "other", deleteFiles: true}]);
+  await expect(page.locator('button.tree-row[title="other/behavior.xar"]')).toHaveCount(0);
+  await expect(page.locator(".notice")).toContainText("deleted from disk when you save");
 });
 
 test("Outline search actions target inactive boxes and grouping retains its captured target", async ({page}) => {
@@ -58,7 +74,7 @@ test("Project background stays isolated and inactive behavior properties open it
   await page.keyboard.press("Escape");
   await page.locator(".project-heading").click({button: "right"});
   await expect(menu(page).getByRole("menuitem", {name: "New behavior…"})).toBeVisible();
-  await expect(menu(page).getByRole("menuitem", {name: "Remove behavior from project…"})).toHaveCount(0);
+  await expect(menu(page).getByRole("menuitem", {name: "Delete behavior…"})).toHaveCount(0);
   await page.keyboard.press("Escape");
   await file.click({button: "right"});
   await menu(page).getByRole("menuitem", {name: "Behavior properties…"}).click();

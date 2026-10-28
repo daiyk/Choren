@@ -95,6 +95,7 @@ async function backend(
               dirty = true;
               return { history: history(), document: structuredClone(doc) };
             }
+            if (command === "project_removal_files") return [];
             if (command === "project_remove_behavior") {
               if ((window as any).failRemoval)
                 throw new Error("Removal failed");
@@ -899,6 +900,7 @@ test("removing a behavior retires open and closed drafts while preserving other 
   await page.getByRole("button", { name: "Open", exact: true }).dblclick();
   await editor.fill("open_draft = True");
   await runCommand(page, "Remove behavior from project");
+  await page.getByRole("dialog", { name: "Delete behavior" }).getByRole("button", { name: "Remove from project, keep files" }).click();
   await expect(editor).toHaveCount(0);
   await expect(page.getByRole("tab", { name: /^behavior_2/ })).toHaveCount(0);
 
@@ -947,6 +949,7 @@ test("failed behavior removal keeps its tabs and drafts", async ({ page }) => {
   await page.locator(".react-flow__node-box").dblclick();
   await page.locator(".cm-content").fill("keep_after_failure = True");
   await runCommand(page, "Remove behavior from project");
+  await page.getByRole("dialog", { name: "Delete behavior" }).getByRole("button", { name: "Remove from project, keep files" }).click();
   await expect(page.locator(".notice[role=alert]")).toContainText(
     "Removal failed",
   );

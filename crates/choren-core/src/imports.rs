@@ -93,11 +93,56 @@ fn listing(path: &str) -> Listing {
     Listing::new("Resources", format!("<File name=\"{}\" src=\"{}\" />", escape_attr(path.rsplit('/').next().unwrap()), escape_attr(path)), path, "resource")
 }
 
+/// What an imported file becomes, by Choregraphe's naming: `<folder>/behavior.xar` is a
+/// behavior, `.dlg` a dialog, `.top` a topic (from its `topic:`/`language:` header), and
+/// anything else a resource.
+enum Content {
+    Behavior,
+    Listed(Listing),
+}
+
+fn content(path: &str, bytes: &[u8]) -> Result<Content, String> {
+    let (folder, file) = path.rsplit_once('/').unwrap_or(("", path));
+    let stem = file.rsplit_once('.').map_or(file, |(stem, _)| stem);
+    let extension = file.rsplit_once('.').map(|(_, ext)| ext.to_lowercase()).unwrap_or_default();
+    Ok(Content::Listed(match extension.as_str() {
+        _ if file == "behavior.xar" => {
+            if folder.is_empty() {
+                return Err("A behavior.xar must go into its own folder. Choose a destination folder, or use Import behavior.".into());
+            }
+            crate::project::parse_xar(path, bytes).map_err(|e| format!("{path} is not a valid behavior: {e}"))?;
+            return Ok(Content::Behavior);
+        }
+        "dlg" => Listing::new("Dialogs", format!("<Dialog name=\"{}\" src=\"{}\" />", escape_attr(stem), escape_attr(path)), path, "dialog"),
+        "top" => match topic_header(bytes) {
+            Some((topic, language)) => Listing::new("Topics", format!("<Topic name=\"{}\" src=\"{}\" topicName=\"{}\" language=\"{}\" />", escape_attr(stem), escape_attr(path), escape_attr(&topic), escape_attr(language)), path, "topic"),
+            None => listing(path),
+        },
+        _ => listing(path),
+    }))
+}
+
+/// A QiChat topic's name and robot language (ISO code) from its `topic: ~name()` and
+/// `language: enu` lines.
+fn topic_header(bytes: &[u8]) -> Option<(String, &'static str)> {
+    let (mut topic, mut language) = (None, None);
+    for line in std::str::from_utf8(bytes).ok()?.lines().map(str::trim) {
+        if let Some(rest) = line.strip_prefix("topic:") {
+            topic = rest.trim().strip_prefix('~').and_then(|r| r.split('(').next()).map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
+        } else if let Some(rest) = line.strip_prefix("language:") {
+            language = crate::project::LANGUAGES.iter().find(|l| l.1 == rest.trim()).map(|l| l.0);
+        }
+        if topic.is_some() && language.is_some() { break; }
+    }
+    Some((topic?, language?))
+}
+
 impl Project {
     /// Files import into `destination`; folder import keeps the selected folder's name/tree and
     /// merges into existing folders. Without a `policy`, same-named files change nothing and are
     /// returned for the UI to ask; `Replace` overwrites them, `UseExisting` keeps them.
-    /// Empty directories are not represented by the PML resource list.
+    /// Behaviors, dialogs and topics are listed as such (see `content`); everything else is a
+    /// resource. Empty directories are not represented by the PML resource list.
     pub fn import_files(&mut self, h: &mut History, sources: &[PathBuf], destination: &str, folder: bool, policy: Option<FilePolicy>) -> Result<Vec<String>, String> {
         if sources.is_empty() || (folder && sources.len() != 1) {
             return Err("Select files or one folder to import.".into());
@@ -119,8 +164,31 @@ impl Project {
             Some(FilePolicy::UseExisting) => files.retain(|f| !existing.contains(&f.0)),
             Some(FilePolicy::Rename) => return Err("Renaming imported files is not supported.".into()),
         }
-        let listings = files.iter().filter(|f| !self.files.iter().any(|x| x.path == f.0)).map(|f| listing(&f.0)).collect();
-        edit::set_listed_files(self, h, if folder { "Import folder" } else { "Import files" }, files, listings)?;
+        let contents = files.iter().map(|(path, bytes)| content(path, bytes)).collect::<Result<Vec<_>, _>>()?;
+        edit::change_project(self, h, if folder { "Import folder" } else { "Import files" }, |p| {
+            for ((path, bytes), content) in files.into_iter().zip(contents) {
+                let listed = p.files.iter().find(|f| f.path == path).map(|f| f.kind);
+                let kind = match &content { Content::Behavior => "behavior", Content::Listed(l) => l.kind };
+                // A replaced file that was listed as another kind (e.g. a behavior.xar imported
+                // as a plain resource before) is listed again as what it is.
+                if let Some(old) = listed.filter(|&old| old != kind) {
+                    let section = match old { "resource" => "Resources", "dialog" => "Dialogs", "topic" => "Topics", _ => return Err(format!("{path} already exists in the project.")) };
+                    p.list(&Listing::new(section, String::new(), &path, old), false)?;
+                }
+                match content {
+                    Content::Behavior => {
+                        let (folder, xar) = path.rsplit_once('/').unwrap();
+                        p.list_behavior(folder, xar, &bytes, None)?;
+                        p.pending.remove(&path);
+                    }
+                    Content::Listed(l) => {
+                        if listed != Some(kind) { p.list(&l, true)?; }
+                        p.stage(&path, Some(bytes));
+                    }
+                }
+            }
+            Ok(())
+        })?;
         Ok(vec![])
     }
 

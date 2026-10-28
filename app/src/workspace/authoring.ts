@@ -161,11 +161,29 @@ export const authoring = {
       session,
       await invoke<Change>("project_add_behavior", { session, name, root }),
     ),
-  removeBehavior: async (session: number, behavior: string) =>
+  /** With `deleteFiles`, the behavior's folder is deleted from disk on the next save. */
+  removeBehavior: async (session: number, behavior: string, deleteFiles = false) =>
     withSession(
       session,
-      await invoke<Change>("project_remove_behavior", { session, behavior }),
+      await invoke<Change>("project_remove_behavior", { session, behavior, deleteFiles }),
     ),
+  /** Removes every project entry under `folder`; with `deleteFiles`, the folder goes on save. */
+  removeFolder: async (session: number, folder: string, deleteFiles: boolean) =>
+    withSession(session, await invoke<Change>("project_remove_folder", { session, folder, deleteFiles })),
+  /** Renames or moves a file or folder (behaviors keep their id); files move on save. */
+  movePath: async (session: number, from: string, to: string) =>
+    withSession(session, await invoke<Change>("project_move_path", { session, from, to })),
+  /** Renames the project (its package name); the .pml file keeps its name. */
+  renameProject: async (session: number, name: string) =>
+    withSession(session, await invoke<Change>("project_rename", { session, name })),
+  duplicateBehavior: async (session: number, behavior: string) =>
+    withSession(session, await invoke<Change>("project_duplicate_behavior", { session, behavior })),
+  /** Moves a Project tree entry, or a behavior, before or after `target`. */
+  reorder: async (session: number, item: { path: string } | { behavior: string }, target: string, after: boolean) =>
+    withSession(session, await invoke<Change>("project_reorder", { session, path: null, behavior: null, ...item, target, after })),
+  /** The files that removing a behavior or folder and its files would delete. */
+  removalFiles: (session: number, behavior?: string, folder?: string) =>
+    invoke<string[]>("project_removal_files", { session, behavior: behavior ?? null, folder: folder ?? null }),
   /** Same-named content changes nothing and comes back as `conflicts`; retry with a `policy`. */
   importBehavior: async (session: number, path: string, name: string, policy?: FilePolicy) =>
     imported(session, await invoke<Change | { conflicts: string[] }>("project_import_behavior", { session, path, name, policy })),
