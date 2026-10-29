@@ -64,8 +64,14 @@ fn raw_text(d: &Doc, parent: NodeId, tag: &str) -> Option<String> {
     Some(s)
 }
 
+/// A `.ts` as XML readers see it: line ends normalized, so a file saved with CRLF (Windows)
+/// still matches the parameter values of multi-line strings.
+fn parse_ts(bytes: &[u8]) -> Result<Doc, String> {
+    Doc::parse(&std::str::from_utf8(bytes).map_err(|_| "Translation file is not UTF-8")?.replace("\r\n", "\n"))
+}
+
 fn read_old(bytes: &[u8]) -> Result<BTreeMap<String, Vec<Old>>, String> {
-    let d = Doc::parse(std::str::from_utf8(bytes).map_err(|_| "Translation file is not UTF-8")?)?;
+    let d = parse_ts(bytes)?;
     let mut out: BTreeMap<String, Vec<Old>> = BTreeMap::new();
     for c in d.kids(d.root().unwrap(), "context") {
         let name = raw_text(&d, c, "name").unwrap_or_default();
@@ -142,7 +148,7 @@ fn message(file: Option<&str>, source: &str, comment: &str, kind: Option<&str>, 
 /// are left out, a repeated message keeps its first copy, and a comment is only stored when the
 /// message without it is taken. Blocks: hashes, messages, numerus rules (no contexts block).
 pub fn compile(ts: &[u8]) -> Result<Vec<u8>, String> {
-    let d = Doc::parse(std::str::from_utf8(ts).map_err(|_| "Translation file is not UTF-8")?)?;
+    let d = parse_ts(ts)?;
     let root = d.root().unwrap();
     let text = |n: NodeId, tag: &str| d.kid(n, tag).map(|k| d.text(k)).unwrap_or_default();
     let mut seen = std::collections::HashSet::new();
@@ -261,7 +267,7 @@ pub fn update(p: &mut Project, h: &mut History) -> Result<HistoryState, String> 
     let mut listings = vec![];
     for (path, _) in &files {
         let pml = p.pml.as_ref().unwrap();
-        if !pml.kids(sec, "Translation").any(|t| pml.attr(t, "src").as_deref() == Some(path)) {
+        if !pml.kids(sec, "Translation").any(|t| pml.attr(t, "src").map(|s| crate::project::normalize(&s)).as_ref() == Some(path)) {
             let lang = path.trim_start_matches("translations/translation_").trim_end_matches(".ts");
             listings.push(crate::project::Listing::new("Translations", format!("<Translation name=\"translation_{0}\" src=\"{1}\" language=\"{0}\" />", e(lang), e(path)), path, "translation"));
         } else if !p.files.iter().any(|f| &f.path == path) {

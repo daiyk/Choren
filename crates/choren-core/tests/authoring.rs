@@ -292,6 +292,34 @@ fn translations_gather_localized_strings_and_merge() {
 }
 
 #[test]
+fn translations_update_files_saved_on_windows() {
+    let (mut p, mut h, bid) = new_project("tr-win");
+    let d = &p.behaviors[0].doc;
+    let diagram = inner(d, view::root_box(d));
+    let b = edit::apply(&mut p, &mut h, &bid, "Add", vec![Command::NewBox { diagram, kind: NewBoxKind::Python, name: "Say".into(), x: 0.0, y: 0.0, dialog_file: None }]).unwrap().created[0];
+    let text = BTreeMap::from([("content_type".to_string(), "5".to_string()), ("value".to_string(), "Line one\nLine two".to_string())]);
+    edit::apply(&mut p, &mut h, &bid, "Add parameter", vec![Command::AddPort { r#box: b, kind: PortKind::Parameter, name: "Text".into(), values: text }]).unwrap();
+    translations::update(&mut p, &mut h).unwrap();
+    p.save().unwrap();
+
+    // CRLF line ends and a backslash in the PML, as Windows tools may write them
+    let dir = Path::new(&p.source).parent().unwrap().to_path_buf();
+    let ts = dir.join("translations/translation_en_US.ts");
+    let crlf = std::fs::read_to_string(&ts).unwrap().replace("<translation type=\"unfinished\">Line one\nLine two</translation>", "<translation>Kept</translation>").replace('\n', "\r\n");
+    std::fs::write(&ts, crlf).unwrap();
+    let pml = Path::new(&p.source).to_path_buf();
+    std::fs::write(&pml, std::fs::read_to_string(&pml).unwrap().replace("translations/translation_en_US.ts", "translations\\translation_en_US.ts")).unwrap();
+
+    let mut p = Project::open(&pml).unwrap();
+    let mut h = History::fresh();
+    translations::update(&mut p, &mut h).unwrap();
+    let en = String::from_utf8(p.read_file("translations/translation_en_US.ts").unwrap()).unwrap();
+    assert!(en.contains("<translation>Kept</translation>") && !en.contains("vanished") && !en.contains("obsolete"), "{en}");
+    assert_eq!(p.pml.as_ref().unwrap().write().matches("<Translation ").count(), 1);
+    assert_eq!(p.files.iter().filter(|f| f.kind == "translation").count(), 1);
+}
+
+#[test]
 fn dialogs_create_topics_and_edit_them_undoably() {
     let (mut p, mut h, _) = new_project("dlg");
     assert!(p.add_dialog(&mut h, "bad name", &["en_US".into()]).is_err());
