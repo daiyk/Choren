@@ -304,13 +304,38 @@ fn duplicating_and_reordering_behaviors() {
     assert!(manifest.find(r#"path="third""#).unwrap() < manifest.find(r#"path="behavior_1""#).unwrap());
     edit::undo(&mut p, &mut h).unwrap();
     assert_eq!(names(&p), ["behavior_1", "behavior_1 copy", "third"]);
-    // Tree reorder: folders keep their resources with them.
-    edit::change_project(&mut p, &mut h, "Reorder", |p| p.reorder("behavior_1", "third", true)).unwrap();
+    edit::change_project(&mut p, &mut h, "Reorder", |p| p.reorder_behavior(&id, &third, true)).unwrap();
     assert_eq!(names(&p), ["behavior_1 copy", "third", "behavior_1"]);
     let resources: Vec<_> = p.files.iter().filter(|f| f.kind == "resource").map(|f| f.path.as_str()).collect();
-    assert_eq!(resources, ["behavior_1 copy/sound.ogg", "behavior_1/sound.ogg"]);
-    assert!(p.reorder("behavior_1", "behavior_1/sound.ogg", false).is_err());
+    assert_eq!(resources, ["behavior_1/sound.ogg", "behavior_1 copy/sound.ogg"], "resources keep their PML order");
+    assert!(p.reorder_behavior(&id, &id, false).is_err());
     p.save().unwrap();
     let reopened = Project::open(&root.join("project/demo.pml")).unwrap();
     assert_eq!(names(&reopened), ["behavior_1 copy", "third", "behavior_1"]);
+}
+
+#[test]
+fn chorenproj_keeps_the_tree_order_beside_the_pml() {
+    let (root, mut p, mut h) = setup("chorenproj");
+    let file = root.join("project/demo.chorenproj");
+    assert_eq!(p.choren_file().as_deref(), Some("demo.chorenproj"));
+    let order = serde_json::json!({"": ["behavior_1", "demo.pml", "manifest.xml"]});
+    edit::change_project(&mut p, &mut h, "Reorder", |p| p.set_choren("treeOrder", Some(order.clone()))).unwrap();
+    assert!(!file.exists(), "written on save");
+    assert!(p.state(&h, vec![]).dirty);
+    edit::undo(&mut p, &mut h).unwrap();
+    assert!(p.choren.is_empty() && p.pending.is_empty());
+    edit::redo(&mut p, &mut h).unwrap();
+    p.save().unwrap();
+    let text = fs::read_to_string(&file).unwrap();
+    assert!(text.contains(r#""format": "chorenproj""#) && text.contains(r#""version": 1"#));
+    let reopened = Project::open(&root.join("project/demo.pml")).unwrap();
+    assert_eq!(reopened.choren["treeOrder"], order);
+    assert!(!reopened.files.iter().any(|f| f.path.ends_with(".chorenproj")), "not a PML entry");
+    // A rename keeps its place in the order.
+    edit::change_project(&mut p, &mut h, "Rename", |p| p.move_path("behavior_1", "Dance")).unwrap();
+    assert_eq!(p.choren["treeOrder"][""][0], "Dance");
+    assert!(p.set_choren("version", Some(2.into())).is_err());
+    fs::write(&file, "not json").unwrap();
+    assert!(Project::open(&root.join("project/demo.pml")).unwrap().diagnostics.iter().any(|d| d.message.contains("Choren project data")));
 }

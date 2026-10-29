@@ -42,6 +42,10 @@ pub struct Project {
     pub structure_dirty: bool,
     /// Non-behavior files of a `.crg` archive (relative path → bytes), kept for save-as-folder.
     pub archive: BTreeMap<String, Vec<u8>>,
+    /// Choren's own project data, kept beside the PML as `<name>.chorenproj` (JSON): what the
+    /// PML has no place for, such as the Project tree order (`treeOrder`). Staged like any
+    /// project file, so changes are written on save and undo with the project history.
+    pub choren: serde_json::Map<String, serde_json::Value>,
 }
 
 /// Robot languages (`share/choregraphe/robotlanguages`: ISO code → ASR embedded code). Topic
@@ -106,7 +110,7 @@ impl Project {
         };
         let bytes = std::fs::read(path).map_err(|e| format!("Cannot read {source}: {e}"))?;
         let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-        let mut p = Project { source: source.clone(), format, name: stem, behaviors: vec![], files: vec![], metadata: BTreeMap::new(), diagnostics: vec![], pml: None, manifest: None, pending: BTreeMap::new(), deleted: BTreeSet::new(), structure_dirty: false, archive: BTreeMap::new() };
+        let mut p = Project { source: source.clone(), format, name: stem, behaviors: vec![], files: vec![], metadata: BTreeMap::new(), diagnostics: vec![], pml: None, manifest: None, pending: BTreeMap::new(), deleted: BTreeSet::new(), structure_dirty: false, archive: BTreeMap::new(), choren: serde_json::Map::new() };
         match format {
             Format::Xar => {
                 let file = path.file_name().unwrap().to_string_lossy().to_string();
@@ -197,7 +201,57 @@ impl Project {
             }
         }
         self.pml = Some(pml);
+        if let Some(file) = self.choren_file() {
+            if let Ok(text) = std::fs::read_to_string(dir.join(&file)) {
+                match serde_json::from_str::<serde_json::Value>(&text) {
+                    Ok(serde_json::Value::Object(mut data)) => {
+                        data.remove("format");
+                        data.remove("version");
+                        self.choren = data;
+                    }
+                    _ => self.diagnostics.push(Diagnostic::warning(&file, "Choren project data is unreadable; it is replaced when the tree order next changes.")),
+                }
+            }
+        }
         Ok(())
+    }
+
+    /// `<name>.chorenproj` beside the `.pml` (none for `.crg` and `.xar`).
+    pub fn choren_file(&self) -> Option<String> {
+        (self.format == Format::Pml).then(|| format!("{}.chorenproj", Path::new(&self.source).file_stem().unwrap_or_default().to_string_lossy()))
+    }
+
+    /// Sets (or with `None` removes) a key of the Choren project data and stages its file.
+    pub fn set_choren(&mut self, key: &str, value: Option<serde_json::Value>) -> Result<(), String> {
+        let file = self.choren_file().ok_or("Choren project data needs a .pml project")?;
+        if matches!(key, "format" | "version") { return Err(format!("{key} is reserved")); }
+        match value {
+            Some(value) => { self.choren.insert(key.into(), value); }
+            None => { self.choren.remove(key); }
+        }
+        let mut data = serde_json::Map::new();
+        data.insert("format".into(), "chorenproj".into());
+        data.insert("version".into(), 1.into());
+        data.extend(self.choren.clone());
+        self.stage(&file, Some((serde_json::to_string_pretty(&serde_json::Value::Object(data)).unwrap() + "\n").into_bytes()));
+        Ok(())
+    }
+
+    /// Keeps the Project tree order (`treeOrder`: folder → child names) through a move: a renamed
+    /// entry keeps its place, and the order inside a moved folder moves with it.
+    fn retarget_tree_order(&mut self, from: &str, to: &str) -> Result<(), String> {
+        let Some(serde_json::Value::Object(order)) = self.choren.get("treeOrder").cloned() else { return Ok(()) };
+        let parent = |p: &str| p.rsplit_once('/').map_or(String::new(), |(d, _)| d.to_string());
+        let name = |p: &str| p.rsplit('/').next().unwrap_or(p).to_string();
+        let mut next: serde_json::Map<String, serde_json::Value> = order.into_iter()
+            .map(|(dir, names)| (if under(&dir, from) { format!("{to}{}", &dir[from.len()..]) } else { dir }, names))
+            .collect();
+        if parent(from) == parent(to) {
+            if let Some(serde_json::Value::Array(names)) = next.get_mut(&parent(from)) {
+                for n in names.iter_mut().filter(|n| n.as_str() == Some(name(from).as_str())) { *n = name(to).into(); }
+            }
+        }
+        self.set_choren("treeOrder", Some(next.into()))
     }
 
     /// Folder that project-relative paths resolve against (none for read-only `.crg`).
@@ -208,73 +262,41 @@ impl Project {
     /// Writes behaviors, staged files, and the PML/manifest when they changed. Unmodified
     /// documents are written byte for byte; each file is replaced atomically.
     pub fn save(&mut self) -> Result<(), String> {
+        self.save_plan()?.apply().map_err(|e| e.message)?;
+        self.saved();
+        Ok(())
+    }
+
+    /// The files a save writes and deletes, in order, without touching the disk.
+    pub fn save_plan(&self) -> Result<SavePlan, String> {
         // shortcut: CRG archives are import-only; saving one needs "save as project folder".
         let dir = self.root_dir().ok_or("Legacy .crg archives are read-only. Use File › Save as project folder…")?;
-        let put = |rel: &str, bytes: &[u8]| -> Result<(), String> {
-            let target = dir.join(rel);
-            if let Some(parent) = target.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| format!("Cannot create {}: {e}", parent.display()))?;
-            }
-            // Imports can contain any filename, including the old fixed temporary suffix.
-            // Reserve a fresh sibling so saving never clobbers a different project file.
-            let write = || -> std::io::Result<()> {
-                use std::io::Write;
-                for index in 0u64.. {
-                    let tmp = target.with_file_name(format!(".choren-save-{}-{index}", std::process::id()));
-                    let mut file = match std::fs::OpenOptions::new().write(true).create_new(true).open(&tmp) {
-                        Ok(file) => file,
-                        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-                        Err(e) => return Err(e),
-                    };
-                    let result = file.write_all(bytes);
-                    drop(file);
-                    let result = result.and_then(|_| std::fs::rename(&tmp, &target));
-                    if result.is_err() { let _ = std::fs::remove_file(&tmp); }
-                    return result;
-                }
-                unreachable!()
-            };
-            write().map_err(|e| {
-                if e.kind() == std::io::ErrorKind::PermissionDenied {
-                    format!("Cannot save {}: {e}. Check write permissions for the file and its containing folder (saving creates and replaces a temporary file there). Your edits have not been discarded.", target.display())
-                } else {
-                    format!("Cannot save {rel}: {e}")
-                }
-            })
-        };
-        for b in &self.behaviors {
-            put(&b.source, b.doc.write().as_bytes())?;
-        }
-        for (rel, bytes) in &self.pending {
-            put(rel, bytes)?;
-        }
+        let mut steps: Vec<SaveStep> = self.behaviors.iter().map(|b| SaveStep::Write(b.source.clone(), b.doc.write().into_bytes())).collect();
+        steps.extend(self.pending.iter().map(|(rel, bytes)| SaveStep::Write(rel.clone(), bytes.clone())));
         let mut folders = BTreeSet::new();
-        for rel in self.deleted.clone() {
-            if !self.listed(&rel) {
-                match std::fs::remove_file(dir.join(&rel)) {
-                    Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(format!("Cannot delete {rel}: {e}")),
-                    _ => {}
-                }
-                folders.extend(Path::new(&rel).ancestors().skip(1).filter(|d| !d.as_os_str().is_empty()).map(Path::to_path_buf));
-            }
-            self.deleted.remove(&rel);
+        for rel in self.deleted.iter().filter(|rel| !self.listed(rel)) {
+            steps.push(SaveStep::Delete(rel.clone()));
+            folders.extend(Path::new(rel).ancestors().skip(1).filter(|d| !d.as_os_str().is_empty()).map(|d| d.to_string_lossy().into_owned()));
         }
         // Deepest first; folders that still hold other files stay.
-        for folder in folders.iter().rev() {
-            let _ = std::fs::remove_dir(dir.join(folder));
-        }
+        steps.extend(folders.into_iter().rev().map(SaveStep::RemoveFolder));
         if self.structure_dirty {
             if let Some(pml) = &self.pml {
                 let name = Path::new(&self.source).file_name().unwrap().to_string_lossy().to_string();
-                put(&name, pml.write().as_bytes())?;
+                steps.push(SaveStep::Write(name, pml.write().into_bytes()));
             }
             if let Some((rel, m)) = &self.manifest {
-                put(rel, m.write().as_bytes())?;
+                steps.push(SaveStep::Write(rel.clone(), m.write().into_bytes()));
             }
         }
+        Ok(SavePlan { dir, steps })
+    }
+
+    /// Marks the project as written by its last `save_plan`.
+    pub fn saved(&mut self) {
         self.pending.clear();
+        self.deleted.clear();
         self.structure_dirty = false;
-        Ok(())
     }
 
     pub fn state(&self, h: &crate::edit::History, created: Vec<usize>) -> crate::edit::HistoryState {
@@ -769,6 +791,7 @@ impl Project {
         }
         for f in moved.iter().filter(|f| f.kind == "resource") { self.retarget_resource(&f.path, &map(&f.path)); }
         for f in &mut self.files { if under(&f.path, &from) { f.path = map(&f.path); } }
+        self.retarget_tree_order(&from, &to)?;
         self.structure_dirty = true;
         Ok(())
     }
@@ -824,29 +847,6 @@ impl Project {
         }
         self.list_behavior(&folder, &xar, text.as_bytes(), content.as_deref())?;
         Ok(self.behaviors.last().unwrap().id.clone())
-    }
-
-    /// Moves the Project tree entry `path` (a file or folder) before or `after` its sibling
-    /// `target`. Each PML section, the manifest contents and the file list reorder only the
-    /// entries under their folder, in the positions those already hold.
-    pub fn reorder(&mut self, path: &str, target: &str, after: bool) -> Result<(), String> {
-        let parent = |p: &str| p.rsplit_once('/').map_or(String::new(), |(d, _)| d.to_string());
-        let dir = parent(path);
-        if path == target || dir != parent(target) { return Err("Drop it next to an entry in the same folder.".into()); }
-        // Siblings in the order the Project tree shows them.
-        let mut files: Vec<&ProjectFile> = self.files.iter().collect();
-        files.sort_by_key(|f| kind_rank(f.kind));
-        let mut order: Vec<String> = vec![];
-        for f in files {
-            if let Some(c) = child_of(&dir, &f.path) { if !order.contains(&c) { order.push(c); } }
-        }
-        let (moving, at) = (child_of(&dir, path), child_of(&dir, target));
-        let (Some(moving), Some(at)) = (moving.filter(|m| order.contains(m)), at.filter(|a| order.contains(a))) else { return Err("Nothing in the project is there.".into()) };
-        order.retain(|c| *c != moving);
-        let i = order.iter().position(|c| *c == at).unwrap() + after as usize;
-        order.insert(i, moving);
-        self.apply_order(|p| child_of(&dir, p).and_then(|c| order.iter().position(|o| *o == c)));
-        Ok(())
     }
 
     /// Moves the behavior `id` before or `after` the behavior `target` in the project's behavior
@@ -1197,17 +1197,6 @@ fn under(path: &str, prefix: &str) -> bool {
     path.strip_prefix(prefix).is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
 }
 
-/// The name of the child of folder `dir` (`""`: the project root) that `path` is or lies in.
-fn child_of(dir: &str, path: &str) -> Option<String> {
-    let rest = if dir.is_empty() { path } else { path.strip_prefix(dir)?.strip_prefix('/')? };
-    rest.split('/').next().filter(|c| !c.is_empty()).map(str::to_string)
-}
-
-/// The Project tree groups files by kind in PML section order, as reopening the project lists them.
-pub fn kind_rank(kind: &str) -> usize {
-    ["project", "behavior", "resource", "dialog", "topic", "translation", "manifest"].iter().position(|k| *k == kind).unwrap_or(6)
-}
-
 /// Puts the items with a key in key order (stable) within the positions they hold.
 fn permute<T>(items: Vec<T>, keys: &[Option<usize>]) -> Vec<T> {
     let slots: Vec<usize> = (0..items.len()).filter(|&i| keys[i].is_some()).collect();
@@ -1275,4 +1264,80 @@ pub fn write_folder(dir: &Path, name: &str, behaviors: &[(String, Vec<u8>)], res
         std::fs::write(&target, bytes).map_err(|err| format!("Cannot write {}: {err}", target.display()))?;
     }
     Ok(())
+}
+
+/// One file operation of a save, relative to the project folder.
+#[derive(Clone, Debug, PartialEq)]
+pub enum SaveStep {
+    Write(String, Vec<u8>),
+    Delete(String),
+    /// Removed only when empty.
+    RemoveFolder(String),
+}
+
+/// What a save does to the project folder `dir`, in order.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SavePlan {
+    pub dir: PathBuf,
+    pub steps: Vec<SaveStep>,
+}
+
+/// A failed save; `denied` when the OS refused access, so an administrator may still save.
+#[derive(Debug)]
+pub struct SaveError {
+    pub denied: bool,
+    pub message: String,
+}
+
+impl SavePlan {
+    /// Performs the plan as the current user; each file is replaced atomically.
+    pub fn apply(&self) -> Result<(), SaveError> {
+        let fail = |e: &std::io::Error, message: String| SaveError { denied: e.kind() == std::io::ErrorKind::PermissionDenied, message };
+        for step in &self.steps {
+            match step {
+                SaveStep::Write(rel, bytes) => {
+                    let target = self.dir.join(rel);
+                    if let Some(parent) = target.parent() {
+                        std::fs::create_dir_all(parent).map_err(|e| fail(&e, format!("Cannot create {}: {e}", parent.display())))?;
+                    }
+                    replace(&target, bytes).map_err(|e| {
+                        if e.kind() == std::io::ErrorKind::PermissionDenied {
+                            fail(&e, format!("Cannot save {}: {e}. Check write permissions for the file and its containing folder (saving creates and replaces a temporary file there). Your edits have not been discarded.", target.display()))
+                        } else {
+                            fail(&e, format!("Cannot save {rel}: {e}"))
+                        }
+                    })?;
+                }
+                SaveStep::Delete(rel) => match std::fs::remove_file(self.dir.join(rel)) {
+                    Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(fail(&e, format!("Cannot delete {rel}: {e}"))),
+                    _ => {}
+                },
+                SaveStep::RemoveFolder(rel) => {
+                    let _ = std::fs::remove_dir(self.dir.join(rel));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Writes `bytes` to a fresh sibling of `target`, then renames it over `target`.
+fn replace(target: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    // Imports can contain any filename, including the old fixed temporary suffix.
+    // Reserve a fresh sibling so saving never clobbers a different project file.
+    for index in 0u64.. {
+        let tmp = target.with_file_name(format!(".choren-save-{}-{index}", std::process::id()));
+        let mut file = match std::fs::OpenOptions::new().write(true).create_new(true).open(&tmp) {
+            Ok(file) => file,
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        };
+        let result = file.write_all(bytes);
+        drop(file);
+        let result = result.and_then(|_| std::fs::rename(&tmp, target));
+        if result.is_err() { let _ = std::fs::remove_file(&tmp); }
+        return result;
+    }
+    unreachable!()
 }

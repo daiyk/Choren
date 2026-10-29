@@ -35,7 +35,6 @@ import {
   Settings,
   Square,
   Undo2,
-  Workflow,
   X,
 } from "lucide-react";
 import type {
@@ -117,7 +116,7 @@ import {
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { robot, startRobotEvents, useRobot } from "./robot/store";
 import { ProjectProperties } from "./workspace/ProjectProperties";
-import { WelcomeSetup } from "./workspace/WelcomeSetup";
+import { AppMark, WelcomeSetup } from "./workspace/WelcomeSetup";
 import { AboutDialog } from "./workspace/AboutDialog";
 import { Connection } from "./robot/Connection";
 import { VirtualMovementSpeed } from "./robot/panels";
@@ -1674,7 +1673,7 @@ export default function App() {
             aria-label="Application menu"
           >
             <strong>
-              <Workflow size={15} />
+              <AppMark className="app-menu-mark" />
               Choren
             </strong>
             {["File", "Edit", "View", "Connection", "Help"].map((group) => (

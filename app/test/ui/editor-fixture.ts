@@ -1,7 +1,7 @@
 import { expect, type Page } from "@playwright/test";
 
-export async function editorProject(page: Page, extraBehavior = false) {
-  await page.addInitScript(({extraBehavior}) => {
+export async function editorProject(page: Page, extraBehavior = false, extraFiles: {path: string; kind: string}[] = [], choren?: Record<string, unknown>) {
+  await page.addInitScript(({extraBehavior, extraFiles, choren}) => {
     let rid = 0, revision = 0;
     const calls: {command: string; args: any}[] = [];
     const box = (node: number, id: number, name: string, script = "") => ({node, id, name, script, x: 180, y: 120, tooltip: "", bitmaps: [], plugin: "", inputs: [], outputs: [], params: [], resources: []});
@@ -20,6 +20,8 @@ export async function editorProject(page: Page, extraBehavior = false) {
       doc.behaviors.push(other);
       doc.files.push({path: "other/behavior.xar", kind: "behavior", behaviorId: "b2"});
     }
+    doc.files.push(...extraFiles as typeof doc.files);
+    if (choren) Object.assign(doc, {choren});
     Object.assign(window, {calls, isTauri: true, __TAURI_INTERNALS__: {
       transformCallback: () => ++rid,
       invoke: async (command: string, args: any) => {
@@ -63,13 +65,14 @@ export async function editorProject(page: Page, extraBehavior = false) {
           doc.files.push({path: copy.source, kind: "behavior", behaviorId: copy.id});
           return changed("Duplicate behavior");
         }
+        if (command === "project_set_choren") {
+          Object.assign(doc, {choren: {...(doc as any).choren, [args.key]: args.value}});
+          return changed(args.label);
+        }
         if (command === "project_reorder") {
-          // Behaviors reorder by id; tree entries by their top-level folder.
-          const key = args.behavior ? (b: any) => b.id : (b: any) => b.source.split("/")[0];
-          const moving = args.behavior ?? args.path;
-          const order = doc.behaviors.map(key).filter((k: string) => k !== moving);
-          order.splice(order.indexOf(args.target) + (args.after ? 1 : 0), 0, moving);
-          doc.behaviors.sort((a, b) => order.indexOf(key(a)) - order.indexOf(key(b)));
+          const order = doc.behaviors.map(b => b.id).filter((id: string) => id !== args.behavior);
+          order.splice(order.indexOf(args.target) + (args.after ? 1 : 0), 0, args.behavior);
+          doc.behaviors.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
           doc.files.sort((a, b) => doc.behaviors.findIndex(x => x.id === a.behaviorId) - doc.behaviors.findIndex(x => x.id === b.behaviorId));
           return changed("Reorder");
         }
@@ -84,7 +87,7 @@ export async function editorProject(page: Page, extraBehavior = false) {
         throw new Error(`Unexpected IPC: ${command}`);
       },
     }});
-  }, {extraBehavior});
+  }, {extraBehavior, extraFiles, choren});
   await page.goto("/");
   await page.getByRole("button", {name: "Open project", exact: true}).first().click();
   await expect(page.getByRole("button", {name: "Timeline keyframe actions"})).toBeVisible();

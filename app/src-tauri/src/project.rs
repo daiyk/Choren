@@ -108,11 +108,27 @@ pub fn project_redo(sessions: State<Sessions>, session: u32) -> Result<Option<Ch
     with(&sessions, session, |p, h| Ok(edit::redo(p, h).map(|_| Changed { history: p.state(h, vec![]), document: view::project(p) })))
 }
 
+/// Saves the project; when the OS refuses access, the system administrator prompt offers to
+/// save it anyway.
 #[tauri::command]
-pub fn project_save(sessions: State<Sessions>, session: u32) -> Result<HistoryState, String> {
+pub async fn project_save(sessions: State<'_, Sessions>, session: u32) -> Result<HistoryState, String> {
+    let plan = with(&sessions, session, |p, _| p.save_plan())?;
+    if let Err(e) = plan.apply() {
+        if !e.denied { return Err(e.message); }
+        // Unlocked while the prompt is up so the editor stays responsive.
+        let staged = plan.clone();
+        match tauri::async_runtime::spawn_blocking(move || crate::elevate::apply(&staged)).await.map_err(|e| e.to_string())? {
+            Ok(()) => {}
+            Err(crate::elevate::Failure::Cancelled) => return Err("Not saved: administrator access was cancelled. Your edits have not been discarded.".into()),
+            Err(crate::elevate::Failure::Failed(message)) => return Err(format!("{message}. Your edits have not been discarded.")),
+        }
+    }
     with(&sessions, session, |p, h| {
-        p.save()?;
-        h.mark_saved();
+        // Edits made while saving stay unsaved.
+        if p.save_plan()? == plan {
+            p.saved();
+            h.mark_saved();
+        }
         Ok(p.state(h, vec![]))
     })
 }
@@ -257,15 +273,21 @@ pub fn project_duplicate_behavior(sessions: State<Sessions>, session: u32, behav
     })
 }
 
-/// Moves a Project tree entry (`path`) or a behavior next to `target`.
+/// Sets (or with `None` removes) a key of Choren's own project data (`<name>.chorenproj`),
+/// as one undo step named `label`; written on save.
 #[tauri::command]
-pub fn project_reorder(sessions: State<Sessions>, session: u32, path: Option<String>, behavior: Option<String>, target: String, after: bool) -> Result<Changed, String> {
+pub fn project_set_choren(sessions: State<Sessions>, session: u32, key: String, value: Option<serde_json::Value>, label: String) -> Result<Changed, String> {
     with(&sessions, session, |p, h| {
-        edit::change_project(p, h, "Reorder", |p| match (&behavior, &path) {
-            (Some(id), _) => p.reorder_behavior(id, &target, after),
-            (None, Some(path)) => p.reorder(path, &target, after),
-            (None, None) => Err("Select what to move.".into()),
-        })?;
+        edit::change_project(p, h, &label, |p| p.set_choren(&key, value))?;
+        Ok(changed(p, h, vec![]))
+    })
+}
+
+/// Moves a behavior next to `target` in the project's behavior order.
+#[tauri::command]
+pub fn project_reorder(sessions: State<Sessions>, session: u32, behavior: String, target: String, after: bool) -> Result<Changed, String> {
+    with(&sessions, session, |p, h| {
+        edit::change_project(p, h, "Reorder", |p| p.reorder_behavior(&behavior, &target, after))?;
         Ok(changed(p, h, vec![]))
     })
 }

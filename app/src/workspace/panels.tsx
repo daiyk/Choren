@@ -2,7 +2,7 @@ import { ServicesPanel, ApplicationsPanel, CameraPanel } from "../robot/services
 import { ActiveContentPanel } from "../robot/ActiveContent";
 import { ResourcePanel, HistoryPanel, useResourceActions } from "./ResourcePanel";
 import { authoring } from "./authoring";
-import { lazy, Suspense, useCallback, useLayoutEffect, useMemo, useState } from "react";
+import { createContext, lazy, Suspense, useCallback, useContext, useLayoutEffect, useMemo, useState } from "react";
 import type { IDockviewPanelProps } from "dockview-react";
 import {
   AlertTriangle,
@@ -39,6 +39,7 @@ import { native, PROJECT_FILE_MIME } from "../platform";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { Modal } from "./Modal";
 import { ImportMenu } from "./ImportContent";
+import { AppMark } from "./WelcomeSetup";
 import {
   emptySelection,
   graphId,
@@ -50,7 +51,7 @@ import {
 } from "./model";
 import { useWorkspace } from "./context";
 import { panels } from "./registry";
-import { behaviorFolder, fileTree, moveEntry, nameOf, parentOf, under, type FileTree } from "./projectTree";
+import { behaviorFolder, fileTree, moveEntry, moveInTree, nameOf, parentOf, under, type FileTree } from "./projectTree";
 const ScriptViewer = lazy(() =>
   import("./ScriptViewer").then((module) => ({ default: module.ScriptViewer })),
 );
@@ -81,9 +82,7 @@ export function Welcome() {
   const ws = useWorkspace();
   return (
     <div className="welcome">
-      <div className="welcome-mark">
-        <Workflow size={32} />
-      </div>
+      <AppMark className="welcome-mark" />
       <span className="eyebrow">CHOREN STUDIO</span>
       <h1>
         A clearer view of
@@ -131,19 +130,29 @@ export function Welcome() {
 type Workspace = ReturnType<typeof useWorkspace>;
 type DropZone = "before" | "after" | "into";
 /** What is being dragged in the Project tree or the Outline (HTML drag data is unreadable during dragover). */
-let dragging: { kind: "entry"; path: string; group: number } | { kind: "behavior"; id: string } | undefined;
+let dragging: { kind: "entry"; path: string; fixed: boolean } | { kind: "behavior"; id: string } | undefined;
+/** The highlighted row of the Project tree or the Outline: what a click, a menu or a drag acts on. */
+const Selection = createContext<{ selected?: string; select: (key: string) => void }>({ select: () => {} });
+// Pointer down, not focus alone: WebKit does not focus buttons on click.
+const pick = ({ selected, select }: { selected?: string; select: (key: string) => void }, key: string) =>
+  ({ "data-selected": selected === key || undefined, onPointerDown: () => select(key), onFocus: () => select(key) });
+const useSelectable = (key: string) => pick(useContext(Selection), key);
+/** Outline rows: an owner (`address`), a layer, a keyframe or a box in a diagram (`at`). */
+const outlineKey = (address: GraphAddress, part = "") => `outline:${JSON.stringify(address)}${part}`;
 const clearDrop = () => document.querySelectorAll<HTMLElement>("[data-drop]").forEach(el => delete el.dataset.drop);
 const zoneOf = (event: React.DragEvent<HTMLElement>, folder: boolean): DropZone => {
   const r = event.currentTarget.getBoundingClientRect();
   const f = (event.clientY - r.top) / Math.max(1, r.height);
-  return folder ? f < 0.25 ? "before" : f > 0.75 ? "after" : "into" : f < 0.5 ? "before" : "after";
+  return folder ? f < 0.3 ? "before" : f > 0.7 ? "after" : "into" : f < 0.5 ? "before" : "after";
 };
-const reorder = (ws: Workspace, item: { path: string } | { behavior: string }, target: string, after: boolean) => {
+/** Behavior order (PML and manifest), shown by the Outline. */
+const reorder = (ws: Workspace, behavior: string, target: string, after: boolean) => {
   const session = ws.state.project?.session;
-  if (session) void ws.applyChange(() => authoring.reorder(session, item, target, after));
+  if (session) void ws.applyChange(() => authoring.reorder(session, behavior, target, after));
 };
 const structural = (ws: Workspace) => ws.editable && ws.state.project?.format === "pml";
-function behaviorActions(ws: Workspace, behaviorId: string): MenuAction[] {
+/** `moves` replaces Move up/down: Project tree rows move in the tree, the Outline in behavior order. */
+function behaviorActions(ws: Workspace, behaviorId: string, moves?: MenuAction[]): MenuAction[] {
   const editable = structural(ws);
   const behaviors = ws.state.project?.behaviors ?? [];
   const i = behaviors.findIndex(b => b.id === behaviorId);
@@ -153,8 +162,10 @@ function behaviorActions(ws: Workspace, behaviorId: string): MenuAction[] {
     {label: "Open behavior", run: () => ws.openBehavior(behaviorId)},
     {label: "Rename behavior…", run: () => ws.execute("rename-behavior", {behaviorId}), disabled: !editable, reason},
     {label: "Duplicate behavior", run: () => ws.execute("duplicate-behavior", {behaviorId}), disabled: !editable, reason},
-    {label: "Move up", run: () => reorder(ws, {behavior: behaviorId}, behaviors[i - 1].id, false), disabled: !editable || i < 1, reason: editable ? "This is the first behavior." : reason},
-    {label: "Move down", run: () => reorder(ws, {behavior: behaviorId}, behaviors[i + 1].id, true), disabled: !editable || i < 0 || i >= behaviors.length - 1, reason: editable ? "This is the last behavior." : reason},
+    ...moves ?? [
+      {label: "Move up", run: () => reorder(ws, behaviorId, behaviors[i - 1].id, false), disabled: !editable || i < 1, reason: editable ? "This is the first behavior." : reason},
+      {label: "Move down", run: () => reorder(ws, behaviorId, behaviors[i + 1].id, true), disabled: !editable || i < 0 || i >= behaviors.length - 1, reason: editable ? "This is the last behavior." : reason},
+    ],
     {label: "Copy name", run: () => copyText(behavior?.name ?? ""), disabled: !behavior},
     {label: "Copy path", run: () => copyText(behaviorFolder(behavior?.source ?? "")), disabled: !behavior},
     {label: "Behavior properties…", run: () => ws.execute("properties", {behaviorId}), disabled: !editable, reason},
@@ -176,21 +187,23 @@ function boxActions(ws: Workspace, box: Box, address: GraphAddress): MenuAction[
 }
 const containsProjectFile = (entry: FileTree): boolean =>
   entry.file?.kind === "project" || entry.file?.kind === "manifest" || entry.children.some(containsProjectFile);
-/** Drag and drop in the Project tree: before/after a sibling of the same kind group reorders; onto a folder moves into it. */
+/** Drag and drop in the Project tree: the upper or lower edge of a sibling reorders (the tree's
+ * own order); the middle of a folder moves the entry into it. */
 function treeDrop(entry: FileTree, zone: DropZone) {
   const d = dragging;
   if (d?.kind !== "entry" || d.path === entry.path) return undefined;
-  if (zone === "into") return entry.children.length && parentOf(d.path) !== entry.path && !under(entry.path, d.path) && !containsProjectFile(entry) ? "into" : undefined;
-  return parentOf(d.path) === parentOf(entry.path) && d.group === entry.group ? "reorder" : undefined;
+  if (zone === "into") return entry.children.length && !d.fixed && parentOf(d.path) !== entry.path && !under(entry.path, d.path) && !containsProjectFile(entry) ? "into" : undefined;
+  return parentOf(d.path) === parentOf(entry.path) ? "reorder" : undefined;
 }
-function useTreeDrag(entry: FileTree, dragPath: string | undefined) {
+function useTreeDrag(entry: FileTree, dragPath: string, fixed: boolean, siblings: FileTree[]) {
   const ws = useWorkspace();
   const folder = entry.children.length > 0;
-  const source = dragPath !== undefined && structural(ws) ? {
+  // Read-only projects keep their order; resources still drag onto boxes.
+  const source = ws.editable && ws.state.project?.format === "pml" ? {
     draggable: true,
     onDragStart: (event: React.DragEvent<HTMLElement>) => {
       event.stopPropagation();
-      dragging = {kind: "entry", path: dragPath, group: entry.group};
+      dragging = {kind: "entry", path: dragPath, fixed};
       event.dataTransfer.setData("text/plain", dragPath);
       if (entry.file?.kind === "resource") { event.dataTransfer.setData(PROJECT_FILE_MIME, entry.path); event.dataTransfer.effectAllowed = "linkMove"; }
       else event.dataTransfer.effectAllowed = "move";
@@ -220,7 +233,7 @@ function useTreeDrag(entry: FileTree, dragPath: string | undefined) {
       event.preventDefault();
       event.stopPropagation();
       if (action === "into") void moveEntry(ws, d.path, `${entry.path}/${nameOf(d.path)}`);
-      else reorder(ws, {path: d.path}, entry.path, zone === "after");
+      else moveInTree(ws, siblings.map(s => s.name), d.path, entry.path, zone === "after");
     },
   };
   return {...source, ...target};
@@ -233,29 +246,34 @@ function FileBranch({entry, siblings}: {entry: FileTree; siblings: FileTree[]}) 
   const editable = structural(ws);
   const fixed = containsProjectFile(entry);
   const behavior = entry.file?.behaviorId ? ws.state.project?.behaviors.find(b => b.id === entry.file!.behaviorId) : undefined;
-  // A behavior row drags its folder; the project file and manifest stay where they are.
-  const drag = useTreeDrag(entry, fixed ? undefined : behavior ? behaviorFolder(behavior.source) : entry.path);
-  const peers = siblings.filter(s => s.group === entry.group);
-  const at = peers.indexOf(entry);
+  // A behavior row drags its folder; the project file and manifest only reorder.
+  const drag = useTreeDrag(entry, behavior ? behaviorFolder(behavior.source) : entry.path, fixed || !editable, siblings);
+  const selectable = useSelectable(`tree:${entry.path}`);
+  const at = siblings.indexOf(entry);
+  const names = siblings.map(s => s.name);
   const reason = "An editable project folder is required.";
+  // The tree order is saved in the project's .chorenproj, not in the PML.
+  const moves: MenuAction[] = [
+    {label: "Move up", run: () => moveInTree(ws, names, entry.path, siblings[at - 1].path, false), disabled: !editable || at < 1, reason: editable ? "It is already first in its folder." : reason},
+    {label: "Move down", run: () => moveInTree(ws, names, entry.path, siblings[at + 1].path, true), disabled: !editable || at < 0 || at >= siblings.length - 1, reason: editable ? "It is already last in its folder." : reason},
+  ];
   return <li>{menu.element}{resource.element}{entry.children.length ? <details open>
-    <summary {...drag} {...menu.trigger(event => {
+    <summary {...drag} {...selectable} {...menu.trigger(event => {
       const details = event.currentTarget.parentElement!;
       return [
         {label: "Expand subtree", run: () => {details.querySelectorAll("details").forEach(d => d.open = true); (details as HTMLDetailsElement).open = true;}},
         {label: "Collapse subtree", run: () => {details.querySelectorAll("details").forEach(d => d.open = false); (details as HTMLDetailsElement).open = false;}},
         {label: "Rename folder…", run: () => ws.execute("rename-folder", {folder: entry.path}), disabled: !editable || fixed, reason: fixed ? "This folder holds the project file or its manifest." : reason},
-        {label: "Move up", run: () => reorder(ws, {path: entry.path}, peers[at - 1].path, false), disabled: !editable || fixed || at < 1, reason: editable ? "Nothing above it to swap with." : reason},
-        {label: "Move down", run: () => reorder(ws, {path: entry.path}, peers[at + 1].path, true), disabled: !editable || fixed || at < 0 || at >= peers.length - 1, reason: editable ? "Nothing below it to swap with." : reason},
+        ...moves,
         {label: "Copy path", run: () => copyText(entry.path)},
         ...["files", "folder"].map(kind => ({label: `Import ${kind} here…`, run: () => ws.execute(`import-${kind}`, {destination: entry.path}), disabled: !editable, reason})),
         {label: "Delete folder…", run: () => ws.execute("remove-folder", {folder: entry.path}), disabled: !editable || fixed, reason: fixed ? "This folder holds the project file or its manifest." : reason},
       ];
     })}><FolderOpen size={14}/><span>{entry.name}</span></summary>
     <FileBranches entries={entry.children}/>
-  </details> : <button className="tree-row" title={entry.path} {...drag}
-    onClick={open} {...menu.trigger(() => entry.file?.behaviorId ? behaviorActions(ws, entry.file.behaviorId) : [
-      {label: "Open / Preview", run: open}, ...resource.actions, {label: "Copy path", run: () => copyText(entry.path)},
+  </details> : <button className="tree-row" title={entry.path} {...drag} {...selectable}
+    onClick={open} {...menu.trigger(() => entry.file?.behaviorId ? behaviorActions(ws, entry.file.behaviorId, moves) : [
+      {label: "Open / Preview", run: open}, ...resource.actions, ...moves, {label: "Copy path", run: () => copyText(entry.path)},
     ])}>
     {entry.file?.kind === "behavior" ? <Workflow size={14}/> : <File size={14}/>}<span>{entry.name}</span>
     {entry.file?.missing && <AlertTriangle size={13} className="warning"/>}
@@ -268,6 +286,7 @@ function ProjectPanel() {
   const ws = useWorkspace();
   const project = ws.state.project;
   const [query, setQuery] = useState("");
+  const [selected, select] = useState<string>();
   const menu = useContextMenu([project, query], message => ws.notify(message, "error"));
   const actions = () => [["new", "New behavior…"], ["import-behavior", "Import behavior…"], ["import-files", "Import files…"], ["import-folder", "Import folder…"], ["new-dialog", "New dialog topic…"], ["rename-project", "Rename project…"], ["properties", "Project properties"]].map(([id, label]) => {
     const command = ws.commands.find(c => c.id === id);
@@ -283,9 +302,7 @@ function ProjectPanel() {
   return (
     <div className="panel-column" tabIndex={0} {...menu.trigger(actions)}>{menu.element}
       <div className="project-heading">
-        <div className="project-avatar">
-          <Workflow size={18} />
-        </div>
+        <AppMark className="project-avatar" />
         <div className="project-info">
           <strong title={project.name} onDoubleClick={() => ws.execute("rename-project")}>{project.name}</strong>
           <small>
@@ -340,13 +357,16 @@ function ProjectPanel() {
           event.preventDefault();
           void moveEntry(ws, d.path, nameOf(d.path));
         }}>
-        <FileBranches
-          entries={fileTree(
-            project.files.filter((f) =>
-              f.path.toLowerCase().includes(query.toLowerCase()),
-            ),
-          )}
-        />
+          <Selection.Provider value={{selected, select}}>
+            <FileBranches
+              entries={fileTree(
+                project.files.filter((f) =>
+                  f.path.toLowerCase().includes(query.toLowerCase()),
+                ),
+                project.choren?.treeOrder,
+              )}
+            />
+          </Selection.Provider>
         {!project.behaviors.length && (
           <p className="panel-message">This project has no behaviors.</p>
         )}
@@ -403,7 +423,7 @@ function outlineDrag(ws: Workspace, behaviorId: string) {
       if (d?.kind !== "behavior" || d.id === behaviorId) return;
       event.preventDefault();
       event.stopPropagation();
-      reorder(ws, {behavior: d.id}, behaviorId, zone === "after");
+      reorder(ws, d.id, behaviorId, zone === "after");
     },
   };
 }
@@ -423,10 +443,12 @@ function OutlineOwner({
   const ownerActions = () => root ? behaviorActions(ws, address.behaviorId) : boxActions(ws, owner, {...address, levels: address.levels.slice(0, -1)});
   const hasChildren = owner.timeline?.layers.some((l) => l.keyframes.length);
   const drag = root ? outlineDrag(ws, address.behaviorId) : {};
+  const selection = useContext(Selection);
   const entry = (
     <button
       className="tree-row"
       {...(hasChildren ? {} : drag)}
+      {...pick(selection, outlineKey(address, hasChildren ? ":open" : ""))}
       {...menu.trigger(ownerActions)}
       onClick={() =>
         root
@@ -444,14 +466,14 @@ function OutlineOwner({
   if (!hasChildren) return <>{entry}{menu.element}</>;
   return (
     <details className="outline-owner" open={root}>{menu.element}
-      <summary {...drag} {...menu.trigger(ownerActions)}>
+      <summary {...drag} {...pick(selection, outlineKey(address))} {...menu.trigger(ownerActions)}>
         <span>{name}</span>
       </summary>
       {root && entry}
       {owner.timeline!.layers.map((layer, li) => (
         <div key={li}>
           {owner.timeline!.enabled && (
-            <div className="tree-section" tabIndex={0} {...menu.trigger(event => {
+            <div className="tree-section" tabIndex={0} {...pick(selection, outlineKey(address, `@${li}`))} {...menu.trigger(event => {
               const section = event.currentTarget.parentElement!;
               return [
                 {label: "Reveal in timeline", run: () => {ws.navigate({...address, levels: [...address.levels.slice(0, -1), {...address.levels.at(-1)!, layer: li, keyframe: 0}]}); ws.showPanel("timeline");}},
@@ -473,6 +495,7 @@ function OutlineOwner({
                 {owner.timeline!.enabled && (
                   <button
                     className="tree-row keyframe-row"
+                    {...pick(selection, outlineKey(at))}
                     {...menu.trigger(event => {
                       const section = event.currentTarget.parentElement!;
                       return [
@@ -494,6 +517,7 @@ function OutlineOwner({
                       className="tree-row"
                       onClick={() => ws.navigate(at, String(box.id))}
                       onDoubleClick={() => ws.openBox(box, at)}
+                      {...pick(selection, outlineKey(at, `#${box.id}`))}
                       {...menu.trigger(() => boxActions(ws, box, at))}
                     >
                       <Workflow size={13} />
@@ -525,6 +549,7 @@ function OutlineOwner({
 function OutlinePanel() {
   const ws = useWorkspace();
   const [query, setQuery] = useState("");
+  const [selected, select] = useState<string>();
   const menu = useContextMenu([ws.state.project, query], message => ws.notify(message, "error"));
   const entries = useMemo(
     () => (ws.state.project ? outline(ws.state.project) : []),
@@ -546,6 +571,7 @@ function OutlinePanel() {
                   className="search-result"
                   key={i}
                   onClick={() => ws.reveal(entry)}
+                  {...pick({selected, select}, entry.kind === "behavior" ? outlineKey(entry.address) : outlineKey(entry.address, `#${entry.box.id}`))}
                   {...menu.trigger(() => entry.kind === "behavior" ? behaviorActions(ws, entry.address.behaviorId) : boxActions(ws, entry.box, entry.address))}
                 >
                   <Workflow size={14} />
@@ -555,7 +581,7 @@ function OutlinePanel() {
                   </span>
                 </button>
               ))
-          : ws.state.project?.behaviors.map((b) => (
+          : <Selection.Provider value={{selected, select}}>{ws.state.project?.behaviors.map((b) => (
               <OutlineOwner
                 key={b.id}
                 owner={b.root}
@@ -563,7 +589,7 @@ function OutlinePanel() {
                 name={b.name}
                 root
               />
-            ))}
+            ))}</Selection.Provider>}
         {!entries.length && (
           <p className="panel-message">
             The project's nested structure will appear here.
