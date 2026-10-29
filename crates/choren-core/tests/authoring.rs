@@ -320,6 +320,39 @@ fn translations_update_files_saved_on_windows() {
 }
 
 #[test]
+fn set_language_box_generates_its_script_like_the_plugin() {
+    let (mut p, mut h, bid) = new_project("setlang");
+    let d = &mut p.behaviors[0].doc;
+    let diagram = inner(d, view::root_box(d));
+    // the library's Set Reco. Lang. box: placeholder script, speech and dialog switched off
+    let b = edit::insert_raw(d, diagram, r#"<Box name="Set Reco. Lang." id="2" plugin="setlanguage_plugin" x="0" y="0"><script language="4"><content><!-- This is generated at runtime, plugin magic --></content></script><pluginContent><tts use="0"/><dialog use="0"/></pluginContent></Box>"#).unwrap();
+    assert_eq!(view::box_view(&p.behaviors[0].doc, b).plugin_language.as_deref(), Some(""));
+
+    edit::apply(&mut p, &mut h, &bid, "Language", vec![Command::SetBoxContent { r#box: b, bitmaps: None, plugin_text: None, plugin_language: Some("German".into()) }]).unwrap();
+    let v = view::box_view(&p.behaviors[0].doc, b);
+    assert_eq!(v.plugin_language.as_deref(), Some("German"));
+    assert!(v.script.starts_with("# /!\\ Generated content. Do not edit!\n"));
+    assert!(v.script.contains("        self.setTTS = False\n        self.setASR = True\n        self.setDialog = False\n        self.language = \"German\"\n"));
+    assert!(v.script.ends_with("            self.onError()"));
+    let xml = p.behaviors[0].doc.write();
+    assert!(xml.contains("<language>German</language>") && xml.contains("<tts use=\"0\"") && xml.contains("<dialog use=\"0\""), "{xml}");
+
+    edit::apply(&mut p, &mut h, &bid, "Language", vec![Command::SetBoxContent { r#box: b, bitmaps: None, plugin_text: None, plugin_language: Some("French".into()) }]).unwrap();
+    let xml = p.behaviors[0].doc.write();
+    assert_eq!(xml.matches("<language>").count(), 1);
+    assert!(view::box_view(&p.behaviors[0].doc, b).script.contains("self.language = \"French\""));
+    let root = view::root_box(&p.behaviors[0].doc);
+    for (node, language, error) in [(b, "Klingon", "Unknown robot language Klingon"), (root, "German", "A language requires a Set Language box.")] {
+        let e = edit::apply(&mut p, &mut h, &bid, "Language", vec![Command::SetBoxContent { r#box: node, bitmaps: None, plugin_text: None, plugin_language: Some(language.into()) }]).unwrap_err();
+        assert_eq!(e, error);
+    }
+    edit::undo(&mut p, &mut h).unwrap();
+    edit::undo(&mut p, &mut h).unwrap();
+    let back = p.behaviors[0].doc.write();
+    assert!(back.contains("plugin magic") && !back.contains("<language>"));
+}
+
+#[test]
 fn dialogs_create_topics_and_edit_them_undoably() {
     let (mut p, mut h, _) = new_project("dlg");
     assert!(p.add_dialog(&mut h, "bad name", &["en_US".into()]).is_err());

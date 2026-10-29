@@ -11,6 +11,7 @@ import {
 import type { Box, Port } from "../format/types";
 import type { GraphStyle } from "../workspace/storage";
 import { useIcon } from "../icons";
+import { speechLanguageName } from "../workspace/languages";
 import { theme, typeColor } from "./theme";
 import {
   HEADER,
@@ -207,7 +208,8 @@ export const BoxNode = memo(function BoxNode({ id, data, selected, isConnectable
   const customIcon = useIcon(category === "script" && !box.bitmaps[0]?.startsWith("media/images/box/box-") ? box.bitmaps[0] : undefined);
   const duration = durationSummary(box);
   const parameterLabel = `${box.params.length} param${box.params.length === 1 ? "" : "s"}`;
-  const detail = duration?.replace("Duration:", "Timer ·") ?? ({
+  const detail = box.plugin === "setlanguage_plugin" ? (box.pluginLanguage ? speechLanguageName(box.pluginLanguage) : "Language not set")
+    : duration?.replace("Duration:", "Timer ·") ?? ({
     timeline: "Animation", script: "Custom script", comment: "Comment",
   } as Partial<Record<typeof category, string>>)[category] ?? label;
   return (
@@ -224,7 +226,7 @@ export const BoxNode = memo(function BoxNode({ id, data, selected, isConnectable
           {titleText(box.name, cardW - 38, "600 12px system-ui")}
         </text>
         <g className="box-category">
-          <title>{duration ? `${label} · ${duration}` : label}</title>
+          <title>{box.plugin === "setlanguage_plugin" ? `Robot language: ${detail}` : duration ? `${label} · ${duration}` : label}</title>
           <text x={9} y={44}>{titleText(detail, cardW - (box.params.length ? 88 : 18), "11px system-ui")}</text>
         </g>
         <path className="box-divider" d={`M1 52 H${cardW - 1}`} />

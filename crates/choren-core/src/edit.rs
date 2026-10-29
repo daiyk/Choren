@@ -92,7 +92,9 @@ pub enum Command {
     SetAttributes { node: NodeId, values: BTreeMap<String, Option<String>> },
     MoveBoxes { moves: Vec<(NodeId, f64, f64)> },
     SetScript { r#box: NodeId, text: String },
-    SetBoxContent { r#box: NodeId, bitmaps: Option<Vec<String>>, plugin_text: Option<String> },
+    /// `plugin_language` is a Set Language box's language (`SetLanguageBoxCommand`): its
+    /// `pluginContent` and the script the plugin generates from it.
+    SetBoxContent { r#box: NodeId, bitmaps: Option<Vec<String>>, plugin_text: Option<String>, plugin_language: Option<String> },
     /// A Dialog box runs `dialog_file`, a `.dlg` relative to the behavior folder.
     NewBox { diagram: NodeId, kind: NewBoxKind, name: String, x: f64, y: f64, #[serde(default)] dialog_file: Option<String> },
     /// `EditDialogBoxCommand`: points a Dialog box at another `.dlg`.
@@ -319,7 +321,7 @@ impl Tx<'_> {
                 }
             }
             Command::SetScript { r#box, text } => self.set_script(r#box, &text)?,
-            Command::SetBoxContent { r#box, bitmaps, plugin_text } => {
+            Command::SetBoxContent { r#box, bitmaps, plugin_text, plugin_language } => {
                 if !self.d.is_el(r#box, "Box") { return Err("Select a box.".into()); }
                 if let Some(paths) = bitmaps {
                     let old: Vec<_> = self.d.kids(r#box, "bitmap").collect();
@@ -337,6 +339,28 @@ impl Tx<'_> {
                     for n in old { self.detach(n); }
                     let child = self.fragment(&format!("<pluginContent><text>{}</text></pluginContent>", crate::xml::escape_text(&text)), "pluginContent")?;
                     self.insert(r#box, child);
+                }
+                if let Some(language) = plugin_language {
+                    if self.d.attr_raw(r#box, "plugin") != Some("setlanguage_plugin") {
+                        return Err("A language requires a Set Language box.".into());
+                    }
+                    if !crate::templates::SPEECH_LANGUAGES.contains(&language.as_str()) {
+                        return Err(format!("Unknown robot language {language}"));
+                    }
+                    // Keep the services switched off (`<tts use="0"/>`), replace the language.
+                    let old: Vec<_> = self.d.kids(r#box, "pluginContent").collect();
+                    let mut kept = String::new();
+                    let on = |name: &str| !old.iter().flat_map(|&p| self.d.kids(p, name)).any(|n| self.d.attr_raw(n, "use") == Some("0"));
+                    let (tts, asr, dialog) = (on("tts"), on("asr"), on("dialog"));
+                    for &p in &old {
+                        for k in self.d.el(p).children.clone() {
+                            if matches!(&self.d.nodes[k].kind, Kind::Element(_)) && self.d.name(k) != "language" { kept.push_str("\n    "); self.d.write_node(k, &mut kept); }
+                        }
+                    }
+                    for n in old { self.detach(n); }
+                    let child = self.fragment(&format!("<pluginContent>\n    <language>{}</language>{kept}\n</pluginContent>", crate::xml::escape_text(&language)), "pluginContent")?;
+                    self.insert(r#box, child);
+                    self.set_script(r#box, &crate::templates::set_language_script(tts, asr, dialog, &language))?;
                 }
             },
             Command::NewBox { diagram, kind, name, x, y, dialog_file } => {

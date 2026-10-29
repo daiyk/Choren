@@ -84,3 +84,72 @@ pub fn behavior(kind: NewBoxKind) -> String {
     let root = root.lines().map(|l| format!("    {l}")).collect::<Vec<_>>().join("\n");
     format!("<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n<ChoregrapheProject xmlns=\"http://www.ald.softbankrobotics.com/schema/choregraphe/project.xsd\" xar_version=\"3\">\n{root}\n</ChoregrapheProject>\n")
 }
+
+/// ALTextToSpeech / ALDialog names the Set Language box plugin offers (`AR::supportedRobotLanguages`).
+pub const SPEECH_LANGUAGES: &[&str] = &[
+    "Arabic", "Brazilian", "Chinese", "Czech", "Danish", "Dutch", "English", "Finnish", "French", "German", "Greek", "Italian",
+    "Japanese", "Korean", "MandarinTaiwan", "Norwegian", "Polish", "Portuguese", "Russian", "Spanish", "Swedish", "Turkish",
+];
+
+/// The script `libsetlanguage_plugin` generates for a Set Language box (Choregraphe 2.8.8), saved
+/// without the trailing newline. A library box only holds a placeholder until it is generated.
+const SET_LANGUAGE: &str = r#"# /!\ Generated content. Do not edit!
+# -*- coding: utf-8 -*-
+class MyClass(GeneratedClass):
+    def __init__(self):
+        GeneratedClass.__init__(self, False)
+        self.setTTS = #SETLANGUAGE_USETTS
+        self.setASR = #SETLANGUAGE_USEASR
+        self.setDialog = #SETLANGUAGE_USEDIALOG
+        self.language = #SETLANGUAGE_LANGUAGE
+
+    def getService(self, serviceName, humainName):
+        service = None
+        try:
+            service = self.session().service(serviceName)
+        except:
+            self.logger.warn("%s is not available, language setting cannot be applied to %s." % (serviceName, humainName))
+        return service
+
+    def onLoad(self):
+        if self.setTTS:
+            self.tts = self.getService("ALTextToSpeech", "speech")
+        if self.setASR:
+            self.asr = self.getService("ALSpeechRecognition", "recognition")
+        if self.setDialog:
+            self.dialog = self.getService("ALDialog", "dialog")
+
+    def setLanguage(self, service, serviceName):
+        try:
+            if service is None:
+                return False
+            service.setLanguage(self.language)
+            return True
+        except Exception as e:
+            self.logger.error("Could not set language %s for %s: %s" % (self.language, serviceName, e))
+            return False
+
+    def onInput_onSet(self):
+        res = True
+        if self.setTTS:
+            res = self.setLanguage(self.tts, "ALTextToSpeech") and res
+        if self.setASR:
+            res = self.setLanguage(self.asr, "ALSpeechRecognition") and res
+        if self.setDialog:
+            res = self.setLanguage(self.dialog, "ALDialog") and res
+
+        if res:
+            self.onReady()
+        else:
+            self.logger.error("Language %s could not be set for one or more services." % self.language)
+            self.onError()"#;
+
+/// The Set Language script for `language`; `<tts|asr|dialog use="0"/>` in `pluginContent` turn a service off.
+pub fn set_language_script(tts: bool, asr: bool, dialog: bool, language: &str) -> String {
+    let flag = |on: bool| if on { "True" } else { "False" };
+    SET_LANGUAGE
+        .replace("#SETLANGUAGE_USETTS", flag(tts))
+        .replace("#SETLANGUAGE_USEASR", flag(asr))
+        .replace("#SETLANGUAGE_USEDIALOG", flag(dialog))
+        .replace("#SETLANGUAGE_LANGUAGE", &format!("\"{language}\""))
+}
