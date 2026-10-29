@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
 import type { BehaviorManifest, Manifest, Requirements } from "./authoring";
 import { Modal } from "./Modal";
+import { languageCodes, languageName } from "./languages";
 
 type Rows = [string, string][];
 
@@ -13,15 +14,69 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   </label>;
 }
 
+/** "+ Add language" and a menu of the robot languages not yet chosen. */
+function AddLanguage({ taken, onPick }: { taken: string[]; onPick: (code: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    root.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus();
+    const outside = (event: Event) => { if (!root.current?.contains(event.target as Node)) setOpen(false); };
+    document.addEventListener("pointerdown", outside, true);
+    return () => document.removeEventListener("pointerdown", outside, true);
+  }, [open]);
+  const left = languageCodes.filter(code => !taken.includes(code));
+  const close = () => { setOpen(false); root.current?.querySelector<HTMLElement>(".pp-add")?.focus(); };
+  return <div className="pp-language-add" ref={root}>
+    <button type="button" className="pp-add" aria-haspopup="menu" aria-expanded={open} disabled={!left.length} onClick={() => setOpen(!open)}><Plus size={12} />Add language</button>
+    {open && <div className="pp-language-menu" role="menu" aria-label="Robot languages" onKeyDown={event => {
+      const items = [...event.currentTarget.querySelectorAll<HTMLElement>("[role=menuitem]")];
+      const at = items.indexOf(document.activeElement as HTMLElement);
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); items[(at + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus(); }
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); }
+    }}>
+      {left.map(code => <button type="button" role="menuitem" key={code} onClick={() => { onPick(code); close(); }}>
+        {languageName(code)}<small>{code}</small>
+      </button>)}
+    </div>}
+  </div>;
+}
+
+/** The manifest's supported languages as removable chips. */
+function SupportedLanguages({ value, onChange }: { value: string[]; onChange: (value: string[]) => void }) {
+  return <div className="pp-languages" role="group" aria-label="Supported languages">
+    {value.map(code => <span className="pp-language" key={code} title={code}>
+      {languageName(code)}<small>{code}</small>
+      <button type="button" className="icon-button" aria-label={`Remove ${languageName(code)}`} title="Remove" onClick={() => onChange(value.filter(c => c !== code))}><X size={12} /></button>
+    </span>)}
+    {!value.length && <span className="pp-empty">None yet.</span>}
+    <AddLanguage taken={value} onPick={code => onChange([...value, code])} />
+  </div>;
+}
+
+/** A language column cell: project languages first, then the other robot languages. */
+function LanguageSelect({ label, value, preferred, onChange }: { label: string; value: string; preferred: string[]; onChange: (code: string) => void }) {
+  const others = languageCodes.filter(code => !preferred.includes(code));
+  const unknown = value && !preferred.includes(value) && !others.includes(value);
+  return <select aria-label={label} required value={value} onChange={e => onChange(e.target.value)}>
+    <option value="" disabled>Choose…</option>
+    {unknown && <option value={value}>{value}</option>}
+    {preferred.length > 0 && <optgroup label="Project languages">{preferred.map(code => <option key={code} value={code}>{languageName(code)}</option>)}</optgroup>}
+    <optgroup label={preferred.length ? "Other languages" : "Languages"}>{others.map(code => <option key={code} value={code}>{languageName(code)}</option>)}</optgroup>
+  </select>;
+}
+
 /** Per-language texts (or launch conditions) as an editable table. */
-function LocalizedRows({ label, rows, onChange, conditions = false }: {
-  label: string; rows: Rows; onChange: (rows: Rows) => void; conditions?: boolean;
+function LocalizedRows({ label, rows, onChange, conditions = false, languages = [] }: {
+  label: string; rows: Rows; onChange: (rows: Rows) => void; conditions?: boolean; languages?: string[];
 }) {
   const key = conditions ? "purpose" : "language";
+  // A new row takes the first project language without a text yet.
+  const next = conditions ? "" : languages.find(code => !rows.some(([lang]) => lang === code)) ?? "";
   return <div className="pp-list" role="group" aria-label={label}>
     <div className="pp-list-head">
       <span>{label}</span>
-      <button type="button" className="pp-add" onClick={() => onChange([...rows, ["", ""]])}><Plus size={12} />Add {label.toLowerCase()}</button>
+      <button type="button" className="pp-add" onClick={() => onChange([...rows, [next, ""]])}><Plus size={12} />Add {label.toLowerCase()}</button>
     </div>
     {rows.length > 0 && <div className="pp-table">
       <span className="pp-col">{conditions ? "Purpose" : "Language"}</span>
@@ -30,8 +85,11 @@ function LocalizedRows({ label, rows, onChange, conditions = false }: {
       {rows.map(([lang, text], i) => {
         const invalid = conditions && text.includes("]]>");
         return <div className="pp-table-row" key={i}>
-          <input aria-label={`${label} ${key} ${i + 1}`} required value={lang} placeholder={conditions ? "launchTrigger" : "en_US"}
-            onChange={e => onChange(rows.map((r, n) => n === i ? [e.target.value, text] : r))} />
+          {conditions
+            ? <input aria-label={`${label} ${key} ${i + 1}`} required value={lang} placeholder="launchTrigger"
+              onChange={e => onChange(rows.map((r, n) => n === i ? [e.target.value, text] : r))} />
+            : <LanguageSelect label={`${label} ${key} ${i + 1}`} value={lang} preferred={languages}
+              onChange={code => onChange(rows.map((r, n) => n === i ? [code, text] : r))} />}
           <span className="pp-text">
             <textarea aria-label={`${label} text ${i + 1}`} rows={conditions ? 2 : 1} value={text} aria-invalid={invalid}
               ref={el => el?.setCustomValidity(invalid ? "Conditions cannot contain ]]>" : "")}
@@ -60,7 +118,7 @@ export function ProjectProperties({ initial, initialBehaviorPath, onApply, onClo
     if (section) {section.open = true; section.scrollIntoView({block: "center"}); section.querySelector("input")?.focus({preventScroll: true});}
   }, [initialBehaviorPath]);
   const [manifest, setManifest] = useState(initial);
-  const [languages, setLanguages] = useState(initial.supportedLanguages.join(", "));
+  const [languages, setLanguages] = useState(initial.supportedLanguages);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const requirements = manifest.requirements ?? { naoqi: [], robots: [] };
@@ -74,7 +132,7 @@ export function ProjectProperties({ initial, initialBehaviorPath, onApply, onClo
       if (busy) return;
       setBusy(true); setError("");
       try {
-        const result = await onApply({ ...manifest, supportedLanguages: languages.split(",").map(v => v.trim()).filter(Boolean) });
+        const result = await onApply({ ...manifest, supportedLanguages: languages });
         if (result) onClose(); else setError("Could not apply project properties. See the error notification for details.");
       } catch (e) { setError(String(e)); }
       finally { setBusy(false); }
@@ -84,12 +142,15 @@ export function ProjectProperties({ initial, initialBehaviorPath, onApply, onClo
           <h3>Application</h3>
           <Field label="Application ID"><input value={manifest.uuid} onChange={e => setManifest({ ...manifest, uuid: e.target.value })} /></Field>
           <Field label="Version"><input value={manifest.version} placeholder="0.0.0" onChange={e => setManifest({ ...manifest, version: e.target.value })} /></Field>
-          <Field label="Supported languages" hint="Comma separated"><input aria-label="Supported languages" value={languages} placeholder="en_US, fr_FR" onChange={e => setLanguages(e.target.value)} /></Field>
+          <div className="pp-field">
+            <span>Supported languages<small>Languages the robot can run this app in</small></span>
+            <SupportedLanguages value={languages} onChange={setLanguages} />
+          </div>
         </section>
         <section className="pp-section">
           <h3>Store listing</h3>
-          <LocalizedRows label="Titles" rows={manifest.names} onChange={names => setManifest({ ...manifest, names })} />
-          <LocalizedRows label="Descriptions" rows={manifest.descriptions ?? []} onChange={descriptions => setManifest({ ...manifest, descriptions })} />
+          <LocalizedRows label="Titles" languages={languages} rows={manifest.names} onChange={names => setManifest({ ...manifest, names })} />
+          <LocalizedRows label="Descriptions" languages={languages} rows={manifest.descriptions ?? []} onChange={descriptions => setManifest({ ...manifest, descriptions })} />
         </section>
         <section className="pp-section">
           <h3>Behaviors <span className="pp-count">{manifest.behaviors?.length ?? 0}</span></h3>
@@ -107,7 +168,7 @@ export function ProjectProperties({ initial, initialBehaviorPath, onApply, onClo
                   <input type="checkbox" checked={b.permissions.includes(permission)} onChange={e => setBehavior(i, { permissions: e.target.checked ? [...b.permissions, permission] : b.permissions.filter(p => p !== permission) })} />{permission}
                 </label>)}</div>
               </div>
-              {localized.map(([key, label]) => <LocalizedRows key={key} label={label} rows={b[key]} onChange={rows => setBehavior(i, { [key]: rows })} />)}
+              {localized.map(([key, label]) => <LocalizedRows key={key} label={label} languages={languages} rows={b[key]} onChange={rows => setBehavior(i, { [key]: rows })} />)}
               <LocalizedRows label="Launch conditions" conditions rows={b.conditions} onChange={conditions => setBehavior(i, { conditions })} />
             </div>
           </details>)}

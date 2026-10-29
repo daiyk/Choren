@@ -1750,7 +1750,16 @@ textarea.inspector-field {
 .pp-list { display: grid; gap: 6px; min-width: 0; }
 .pp-list-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: calc(12px * var(--text-scale)); color: var(--muted); }
 .pp-add { min-height: 24px; padding: 2px 7px; gap: 4px; font-size: var(--font-small); border-color: transparent; background: transparent; color: var(--accent); }
-.pp-table { display: grid; grid-template-columns: calc(120px * var(--text-scale)) minmax(0, 1fr) 28px; gap: 5px 6px; align-items: start; }
+.pp-table { display: grid; grid-template-columns: calc(160px * var(--text-scale)) minmax(0, 1fr) 28px; gap: 5px 6px; align-items: start; }
+.pp-table select { width: 100%; min-width: 0; }
+.pp-languages { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.pp-language { display: inline-flex; align-items: center; gap: 5px; padding: 2px 2px 2px 9px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-raised); }
+.pp-language small, .pp-language-menu small { color: var(--muted); font-size: calc(10px * var(--text-scale)); }
+.pp-language .icon-button { min-height: 20px; min-width: 20px; padding: 0; border-radius: 999px; border-color: transparent; background: transparent; }
+.pp-language-add { position: relative; }
+.pp-language-menu { position: absolute; z-index: 3; top: calc(100% + 4px); left: 0; display: grid; min-width: calc(220px * var(--text-scale)); max-height: calc(260px * var(--text-scale)); overflow-y: auto; padding: 4px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); box-shadow: 0 8px 24px rgb(0 0 0 / .18); }
+.pp-language-menu button { justify-content: space-between; gap: 12px; border-color: transparent; background: transparent; text-align: left; }
+.pp-language-menu button:hover, .pp-language-menu button:focus-visible { background: var(--surface-raised); }
 .pp-table-row, .pp-robot-row { display: contents; }
 .pp-col { color: var(--muted); font-size: calc(10px * var(--text-scale)); text-transform: uppercase; letter-spacing: .05em; }
 .pp-table input, .pp-table textarea { width: 100%; min-width: 0; }
