@@ -5,6 +5,23 @@ Release notes are extracted from the section matching the version in
 `## [version] - YYYY-MM-DD` headings. Dates below follow the tagged commits;
 this file does not indicate whether a GitHub release has been published.
 
+## [0.3.2] - 2026-10-29
+
+- Keep the Project tree order in `<project>.chorenproj`, Choren's own project file beside
+  the `.pml`, instead of the browser's storage. The order travels with the project folder,
+  is written on save, undoes with the project history, and follows renamed and moved
+  entries. Choregraphe and robot packages ignore the file.
+- Drag folders and files to any position among their siblings, not only into another
+  folder, and use Move up/down on every Project tree entry, not only behaviors.
+- Highlight the selected row in the Project and Outline panels, so it is clear which entry
+  a menu command or drag acts on.
+- When the system refuses to save a project, for example in a protected folder, offer to
+  save it with administrator access through the system prompt (the macOS authorization
+  dialog or Windows UAC). Existing files keep their owner and permissions, and cancelling
+  keeps the edits unsaved.
+- Show the app logo on the Welcome screen and in the Project panel header instead of a
+  generic glyph.
+
 ## [0.3.1] - 2026-10-28
 
 - Delete folders from the Project tree, and choose whether deleting a behavior or folder
