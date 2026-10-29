@@ -5,6 +5,13 @@ Release notes are extracted from the section matching the version in
 `## [version] - YYYY-MM-DD` headings. Dates below follow the tagged commits;
 this file does not indicate whether a GitHub release has been published.
 
+## [0.3.3] - 2026-10-29
+
+- Choose supported robot languages from a menu in Project Properties.
+- View and change the language of Set Language boxes in the editor.
+- Read translation files and project entries written with Windows path separators.
+- Replace the installed robot package before Play starts it, so the latest project changes run.
+
 ## [0.3.2] - 2026-10-29
 
 - Keep the Project tree order in `<project>.chorenproj`, Choren's own project file beside
