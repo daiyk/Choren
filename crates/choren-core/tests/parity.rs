@@ -88,7 +88,7 @@ fn comment_and_bitmap_edits_roundtrip_and_undo_atomically() {
     let b = view::root_box(&p.behaviors[0].doc);
     edit::set_raw(&mut p.behaviors[0].doc, b, "plugin", "textedit_plugin");
     let original = p.behaviors[0].doc.write();
-    edit::apply(&mut p, &mut h, &id, "Content", vec![Command::SetBoxContent {r#box: b, bitmaps: Some(vec!["icons/a&b.png".into()]), plugin_text: Some("A < B & C\nSecond line".into())}]).unwrap();
+    edit::apply(&mut p, &mut h, &id, "Content", vec![Command::SetBoxContent {r#box: b, bitmaps: Some(vec!["icons/a&b.png".into()]), plugin_text: Some("A < B & C\nSecond line".into()), plugin_language: None}]).unwrap();
     let v = view::box_view(&p.behaviors[0].doc, b);
     assert_eq!(v.plugin_text.as_deref(), Some("A < B & C\nSecond line"));
     assert_eq!(v.bitmaps, ["icons/a&b.png"]);

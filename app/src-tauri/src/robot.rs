@@ -307,6 +307,13 @@ async fn play(app: &AppHandle, state: &RobotState, c: &Arc<Client>, pkg: Vec<u8>
     if c.call("ALBehaviorManager", "isBehaviorRunning", vec![name.as_str().into()]).await?.as_bool() == Some(true) {
         c.call("ALBehaviorManager", "stopBehavior", vec![name.as_str().into()]).await?;
     }
+    // NAOqi keeps an installed package when the upload has the same version ("already installed
+    // with the same version number"), so Play would start the old copy. Like Choregraphe's
+    // PackageSynchronizer (checkIfApplicationAlreadyInstalled → removeApplication), remove it first.
+    let uuid = name.split('/').next().unwrap_or_default();
+    if c.call("PackageManager", "hasPackage", vec![uuid.into()]).await?.as_bool() == Some(true) {
+        c.call("PackageManager", "removePkg", vec![uuid.into()]).await.map_err(|e| format!("Cannot replace the installed {uuid}: {e}"))?;
+    }
     // shortcut: no md5 (NAOqi skips the check when it is empty); the TCP transfer is checked already.
     let file = Value::Object(choren_qi::object::file(pkg));
     if c.call("PackageManager", "_install", vec![file, "choren".into(), "".into()]).await?.as_bool() != Some(true) {

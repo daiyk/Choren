@@ -11,7 +11,7 @@ export type EditCommand =
     }
   | { type: "moveBoxes"; moves: [number, number, number][] }
   | { type: "setScript"; box: number; text: string }
-  | { type: "setBoxContent"; box: number; bitmaps?: string[]; pluginText?: string }
+  | { type: "setBoxContent"; box: number; bitmaps?: string[]; pluginText?: string; pluginLanguage?: string }
   | { type: "setDialogFile"; box: number; file: string }
   | { type: "sortPorts"; box: number; ports: number[] }
   | { type: "translateKeyframes"; keyframes: number[]; delta: number }

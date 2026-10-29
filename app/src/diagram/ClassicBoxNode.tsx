@@ -1,6 +1,7 @@
 import { memo, useEffect, useId } from "react";
 import { useUpdateNodeInternals, type NodeProps } from "@xyflow/react";
 import { useIcon } from "../icons";
+import { speechLanguageName } from "../workspace/languages";
 import { theme } from "./theme";
 import { BoxText, Anchor, PortGlyph, INPUT_GLYPH, OUTPUT_GLYPH, titleText, type BoxNodeType } from "./BoxNode";
 import {
@@ -50,6 +51,7 @@ export const ClassicBoxNode = memo(function ClassicBoxNode({
   const iconLeft = NOTCH + (w - NOTCH - ICON_W) / 2;
   const iconTop = HEADER + Math.max(4, (h - HEADER - 22 - ICON_H) / 2);
   const label = titleText(box.name, title - 4, "600 11px system-ui");
+  const language = box.plugin === "setlanguage_plugin" ? (box.pluginLanguage ? speechLanguageName(box.pluginLanguage) : "Not set") : "";
   return (
     <div className="box-classic" style={{ width: w, height: h }}>
       <svg
@@ -142,6 +144,17 @@ export const ClassicBoxNode = memo(function ClassicBoxNode({
             </g>
           </g>
         ))}
+        {language && (
+          <g className="box-language">
+            <title>{`Language: ${language}`}</title>
+            <rect x={NOTCH + 3} y={iconTop + ICON_H - 15} width={w - NOTCH - 6} height={15} rx={7.5}
+              fill="var(--surface)" stroke={theme.line} strokeOpacity={0.45} />
+            <text x={NOTCH + (w - NOTCH) / 2} y={iconTop + ICON_H - 7.5} fontSize={9.5} fontFamily="system-ui"
+              textAnchor="middle" dominantBaseline="central" fill={theme.line}>
+              {titleText(language, w - NOTCH - 14, "9.5px system-ui")}
+            </text>
+          </g>
+        )}
         {wrench ? (
           <image href={wrench} x={NOTCH + 4} y={h - 20} width={16} height={16} />
         ) : (

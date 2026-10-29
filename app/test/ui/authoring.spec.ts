@@ -131,6 +131,7 @@ async function backend(
                   box.params.find((p: any) => p.node === c.node).value =
                     c.values.value;
                 if (c.type === "setScript") find(c.box).script = c.text;
+                if (c.type === "setBoxContent" && c.pluginLanguage) find(c.box).pluginLanguage = c.pluginLanguage;
                 if (c.type === "addPort") {
                   const owner = find(c.box);
                   const id = Math.max(...[...owner.inputs, ...owner.outputs, ...owner.params].map((p: any) => p.id)) + 1;
@@ -423,6 +424,35 @@ test("the wrench selects its box and reopens parameter editing", async ({ page }
   await expect(page.getByRole("textbox", { name: "Text value" })).toHaveValue("Hi");
   await expect(page.locator(".cm-content")).toHaveCount(0);
   expect(await calls(page, "project_edit")).toEqual([]);
+});
+
+test("Set Language boxes show their language and pick it in the inspector", async ({ page }, testInfo) => {
+  const set = (name: string, x: number, content: string, script = "<!-- This is generated at runtime, plugin magic -->") =>
+    `<Box id="${x}" name="${name}" plugin="setlanguage_plugin" x="${140 + x * 220}" y="120"><script language="4"><content>${script}</content></script>${content}<Input id="1" name="onLoad" type="1" nature="0" inner="1"/><Input id="2" name="onSet" type="1" nature="1"/><Output id="3" name="onReady" type="1" nature="2"/></Box>`;
+  const boxes = set("Set Language", 1, "<pluginContent><language>German</language></pluginContent>")
+    + set("Set Reco. Lang.", 2, '<pluginContent><tts use="0"/><dialog use="0"/></pluginContent>')
+    + set("Old Set Language", 3, "<pluginContent/>", '<![CDATA[class MyClass(GeneratedClass):\n    def __init__(self):\n        self.language = "MandarinTaiwan"\n]]>');
+  await backend(page, xar.replace(/<Diagram>.*<\/Diagram>/, `<Diagram>${boxes}</Diagram>`));
+  await page.getByRole("button", { name: "Open project", exact: true }).first().click();
+  const details = page.locator(".box-category text");
+  await expect(details).toHaveText(["German", "Language not set", "Chinese (Traditional)"]);
+
+  await page.locator(".react-flow__node-box", { hasText: "Set Reco. Lang." }).click();
+  const picker = page.getByRole("combobox", { name: "Set Language language" });
+  await expect(picker).toHaveValue("");
+  await expect(page.locator(".inspector")).toContainText("until then the box has no script");
+  await page.locator(".react-flow__node-box", { hasText: /^Set Language/ }).click();
+  await expect(picker).toHaveValue("German");
+  await expect(picker.locator("option:checked")).toHaveText("German");
+  await picker.selectOption({ label: "Chinese (Traditional)" });
+  await expect.poll(async () => (await calls(page, "project_edit")).at(-1)?.commands).toEqual([{ type: "setBoxContent", box: expect.any(Number), pluginLanguage: "MandarinTaiwan" }]);
+  await expect(details.first()).toHaveText("Chinese (Traditional)");
+  if (process.env.CAPTURE_UI) await page.screenshot({ path: testInfo.outputPath("set-language.png") });
+
+  await graphUI(page, "classic");
+  await expect(page.locator(".box-language title")).toHaveText(["Language: Chinese (Traditional)", "Language: Not set", "Language: Chinese (Traditional)"]);
+  await expect(page.locator(".box-language text").nth(1)).toHaveText("Not set");
+  if (process.env.CAPTURE_UI) await page.getByTestId("graph").screenshot({ path: testInfo.outputPath("set-language-classic.png") });
 });
 
 test("appearance categories survive rename and keep connections attached", async ({ page }) => {

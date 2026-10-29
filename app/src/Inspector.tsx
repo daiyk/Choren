@@ -7,6 +7,7 @@ import { categories, CategoryBadge, isBoxCategory } from "./diagram/appearance";
 import type { Box, Param, ProjectDocument, ProjectFile } from "./format/types";
 import { behaviorRelative } from "./format/xml";
 import { useContextMenu, type MenuAction } from "./workspace/ContextMenu";
+import { speechLanguageName, speechLanguages } from "./workspace/languages";
 import {
   CONTENT_TYPE,
   INPUT_NATURE,
@@ -632,6 +633,29 @@ export function Inspector({
           ) : (
             <p className="comment-content">{box.pluginText || "Empty comment"}</p>
           )}
+        </details>
+      )}
+      {box.plugin === "setlanguage_plugin" && (
+        <details open>
+          <summary>Language</summary>
+          <div className="form-grid">
+            <Row label="Robot language">
+              {editBox ? (
+                <select
+                  aria-label="Set Language language"
+                  value={box.pluginLanguage ?? ""}
+                  onChange={(e) => onEdit!("Change language", [{ type: "setBoxContent", box: box.node!, pluginLanguage: e.target.value }])}
+                >
+                  {!box.pluginLanguage && <option value="" disabled>Choose a language…</option>}
+                  {box.pluginLanguage && !speechLanguages.includes(box.pluginLanguage) && <option value={box.pluginLanguage}>{box.pluginLanguage}</option>}
+                  {speechLanguages.map((name) => <option key={name} value={name}>{speechLanguageName(name)}</option>)}
+                </select>
+              ) : (
+                <span>{box.pluginLanguage ? speechLanguageName(box.pluginLanguage) : "Not set"}</span>
+              )}
+            </Row>
+          </div>
+          <p className="muted">{box.pluginLanguage ? "Speech, recognition and dialog switch to this language when onSet fires." : "Choose a language: until then the box has no script and does nothing on the robot."}</p>
         </details>
       )}
       <details open>

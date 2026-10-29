@@ -132,6 +132,8 @@ export interface Box {
   plugin: string;
   /** Text Edit / Comment plugin payload, separate from its generated script. */
   pluginText?: string;
+  /** Set Language box: the speech language name ("German"); empty while the script is a placeholder. */
+  pluginLanguage?: string;
   dialogFile?: string;
   inputs: Port[];
   outputs: Port[];

@@ -154,6 +154,10 @@ pub struct BoxView {
     pub plugin: String,
     #[serde(rename = "pluginText", skip_serializing_if = "Option::is_none")]
     pub plugin_text: Option<String>,
+    /// A Set Language box's language: its `pluginContent`, else its generated script; empty when
+    /// the box still holds the library placeholder.
+    #[serde(rename = "pluginLanguage", skip_serializing_if = "Option::is_none")]
+    pub plugin_language: Option<String>,
     #[serde(rename = "dialogFile", skip_serializing_if = "Option::is_none")]
     pub dialog_file: Option<String>,
     pub inputs: Vec<Port>,
@@ -339,6 +343,11 @@ pub fn box_view(d: &Doc, b: NodeId) -> BoxView {
         plugin_text: (d.attr_raw(b, "plugin") == Some("textedit_plugin")).then(||
             d.kid(b, "pluginContent").and_then(|p| d.kid(p, "text")).map(|t| content_text(d, t)).unwrap_or_default()
         ),
+        plugin_language: (d.attr_raw(b, "plugin") == Some("setlanguage_plugin")).then(|| {
+            let script = d.kid(b, "script").and_then(|s| d.kid(s, "content")).map(|c| content_text(d, c)).unwrap_or_default();
+            let generated = script.lines().find_map(|l| l.trim().strip_prefix("self.language = \"")?.strip_suffix('"')).map(str::to_string);
+            d.kid(b, "pluginContent").and_then(|p| d.kid(p, "language")).map(|l| d.text(l)).or(generated).unwrap_or_default()
+        }),
         dialog_file: d.kid(b, "dialogFile").map(|f| d.text(f)),
         inputs: d.kids(b, "Input").map(|p| port(d, p)).collect(),
         outputs: d.kids(b, "Output").map(|p| port(d, p)).collect(),

@@ -97,6 +97,9 @@ function box(b: X): Box {
     script: text(b.script?.content),
     plugin: b.plugin ?? "",
     pluginText: b.plugin === "textedit_plugin" ? text(b.pluginContent?.text) : undefined,
+    pluginLanguage: b.plugin === "setlanguage_plugin"
+      ? text(b.pluginContent?.language) || (/^\s*self\.language = "([^"]*)"$/m.exec(text(b.script?.content))?.[1] ?? "")
+      : undefined,
     dialogFile: b.dialogFile === undefined ? undefined : text(b.dialogFile),
     inputs: (b.Input ?? []).map(port),
     outputs: (b.Output ?? []).map(port),
