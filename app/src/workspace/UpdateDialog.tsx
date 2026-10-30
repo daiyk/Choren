@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { Modal } from "./Modal";
+import { Markdown } from "./markdown";
 
 /** Offers a release found by the updater; installing restarts the app once work is saved or discarded. */
 export function UpdateDialog({ update, confirmReplace, onClose }: {
@@ -35,7 +36,7 @@ export function UpdateDialog({ update, confirmReplace, onClose }: {
   return <Modal title="Update available" onClose={() => !progress && onClose()}>
     <div className="settings-content">
       <p>Choren {update.version} is available. You have {update.currentVersion}.</p>
-      {update.body && <p className="muted" style={{ whiteSpace: "pre-wrap" }}>{update.body}</p>}
+      {update.body && <Markdown className="release-notes" source={update.body} />}
       <p className="muted">Choren restarts after the update. You are asked about unsaved changes first.</p>
       {error && <p className="error" role="alert">{error}</p>}
       <div className="dialog-actions">

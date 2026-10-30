@@ -721,6 +721,7 @@ function GraphDocument({ behaviorId, api }: { behaviorId: string; api: IDockview
         <Diagram
           key={`${ws.state.session}:${key}`}
           graphStyle={ws.graphStyle}
+          scrolling={ws.graphScrolling}
           diagram={resolved.diagram}
           owner={resolved.owner}
           selection={ws.state.selections[key] ?? emptySelection}

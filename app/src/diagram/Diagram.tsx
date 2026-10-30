@@ -37,6 +37,7 @@ import { Modal } from "../workspace/Modal";
 import { Inspector } from "../Inspector";
 import type { Command } from "../workspace/registry";
 import { ContextMenu } from "../workspace/ContextMenu";
+import { fromTrackpad, zoomAround, type ScrollMode } from "./gestures";
 
 type MenuTarget = { kind: "canvas" } | { kind: "box"; box: Box } |
   { kind: "selection" } | { kind: "connection"; id: string };
@@ -103,6 +104,9 @@ const StyledBoxNode = memo(function StyledBoxNode(props: NodeProps<BoxNodeType>)
     : <BoxNode {...props} />;
 });
 const nodeTypes = { box: StyledBoxNode, rail: RailNode };
+const MIN_ZOOM = 0.1, MAX_ZOOM = 4;
+/** WebKit reports trackpad pinches as gesture events with a scale relative to the pinch start. */
+type GestureEvent = UIEvent & { scale: number; clientX: number; clientY: number };
 const edgeTypes = { link: LinkEdge };
 
 export function buildGraph(
@@ -163,6 +167,8 @@ export interface GraphControls {
 }
 interface Props {
   graphStyle?: GraphStyle;
+  /** What two-finger scrolling and the mouse wheel do; pinching always zooms. */
+  scrolling?: ScrollMode;
   diagram: DiagramModel;
   owner: Box;
   selection: Selection;
@@ -184,6 +190,7 @@ interface Props {
 }
 function Graph({
   graphStyle = "choren",
+  scrolling = "auto",
   diagram,
   owner,
   selection,
@@ -233,6 +240,81 @@ function Graph({
     closeMenus();
   }, [graphStyle, diagram, store, closeMenus]);
   const fitted = useRef(false);
+  // Gesture moves arrive every frame; the workspace stores the view once they settle.
+  const settling = useRef(false);
+  const onViewportRef = useRef(onViewport);
+  onViewportRef.current = onViewport;
+  useEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    let stream: { trackpad: boolean; at: number } | undefined;
+    let pinch: { zoom: number } | undefined;
+    let timer = 0;
+    const onPane = (e: Event) => {
+      const target = e.target as Element;
+      return !!target.closest(".react-flow__renderer") && !target.closest(".nowheel");
+    };
+    const move = (next: Viewport) => {
+      settling.current = true;
+      void flow.setViewport(next);
+      clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        settling.current = false;
+        onViewportRef.current(flow.getViewport());
+      }, 150);
+    };
+    const wheel = (e: WheelEvent) => {
+      if (!onPane(e)) return;
+      // Chromium reports pinches as ctrl+wheel, which React Flow zooms; WebKit sends gesture events instead.
+      if (e.ctrlKey) {
+        if (pinch) { e.preventDefault(); e.stopPropagation(); }
+        return;
+      }
+      // Classify a whole scroll at its start, so momentum and accelerated steps keep one meaning.
+      if (!stream || e.timeStamp - stream.at > 200) stream = { trackpad: fromTrackpad(e), at: e.timeStamp };
+      stream.at = e.timeStamp;
+      stream.trackpad ||= e.deltaX !== 0;
+      if (scrolling === "zoom" || (scrolling === "auto" && !stream.trackpad)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const step = e.deltaMode === 1 ? 20 : e.deltaMode === 2 ? el.clientHeight : 1;
+      const [dx, dy] = e.shiftKey && !e.deltaX ? [e.deltaY, 0] : [e.deltaX, e.deltaY];
+      const v = flow.getViewport();
+      move({ x: v.x - dx * step, y: v.y - dy * step, zoom: v.zoom });
+    };
+    const gestureStart = (e: Event) => {
+      if (!onPane(e)) return;
+      e.preventDefault();
+      pinch = { zoom: flow.getViewport().zoom };
+    };
+    const gestureChange = (e: Event) => {
+      if (!pinch) return;
+      e.preventDefault();
+      const { scale, clientX, clientY } = e as GestureEvent;
+      const rect = (el.querySelector(".react-flow") ?? el).getBoundingClientRect();
+      move(zoomAround(flow.getViewport(), pinch.zoom * scale, { x: clientX - rect.left, y: clientY - rect.top }, MIN_ZOOM, MAX_ZOOM));
+    };
+    const gestureEnd = (e: Event) => {
+      if (!pinch) return;
+      e.preventDefault();
+      pinch = undefined;
+    };
+    el.addEventListener("wheel", wheel, { capture: true, passive: false });
+    el.addEventListener("gesturestart", gestureStart);
+    el.addEventListener("gesturechange", gestureChange);
+    el.addEventListener("gestureend", gestureEnd);
+    return () => {
+      clearTimeout(timer);
+      if (settling.current) {
+        settling.current = false;
+        onViewportRef.current(flow.getViewport());
+      }
+      el.removeEventListener("wheel", wheel, { capture: true });
+      el.removeEventListener("gesturestart", gestureStart);
+      el.removeEventListener("gesturechange", gestureChange);
+      el.removeEventListener("gestureend", gestureEnd);
+    };
+  }, [flow, scrolling]);
   // React Flow can emit node and edge changes in one event before React renders.
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
@@ -518,12 +600,12 @@ function Graph({
         edgesReconnectable={false}
         deleteKeyCode={null}
         zoomOnDoubleClick={false}
-        minZoom={0.1}
-        maxZoom={4}
+        minZoom={MIN_ZOOM}
+        maxZoom={MAX_ZOOM}
         defaultViewport={savedViewport ?? { x: 0, y: 0, zoom: 1 }}
         onlyRenderVisibleElements
         onMoveStart={() => closeMenus()}
-        onMoveEnd={(_, v) => onViewport(v)}
+        onMoveEnd={(_, v) => { if (!settling.current) onViewport(v); }}
         onNodesChange={(changes) => {
           const selected = new Set(selectionRef.current.nodes);
           for (const change of changes)

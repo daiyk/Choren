@@ -1244,6 +1244,48 @@ dd {
   font-size: var(--font-small);
   line-height: 1.6;
 }
+.release-notes {
+  margin: 12px 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: 2px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  font-size: var(--font-small);
+  line-height: 1.6;
+}
+.release-notes h3,
+.release-notes h4 {
+  margin: 10px 0 4px;
+  font-size: calc(12px * var(--text-scale));
+}
+.release-notes ul,
+.release-notes ol {
+  margin: 8px 0;
+  padding-left: 18px;
+}
+.release-notes li + li {
+  margin-top: 4px;
+}
+.release-notes code {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--surface);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.95em;
+}
+.release-notes pre {
+  overflow: auto;
+  padding: 6px 8px;
+  background: var(--surface);
+}
+.release-notes pre code {
+  padding: 0;
+}
+.markdown-link {
+  text-decoration: underline;
+}
 .setting {
   display: flex;
   justify-content: space-between;

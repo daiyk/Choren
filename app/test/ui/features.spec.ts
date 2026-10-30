@@ -1356,3 +1356,24 @@ test("expired library grants leave bundled content available and reject write ta
   await expect(page.getByRole("menuitem", {name: "Paste", exact: true})).toHaveCount(0);
   await expect(page.getByRole("menuitem", {name: "New folder…", exact: true})).toHaveCount(0);
 });
+
+test("two-finger scrolling pans the graph and Ctrl+scroll zooms it", async ({ page }) => {
+  await backend(page);
+  const graph = page.getByTestId("graph");
+  const viewport = page.locator(".react-flow__viewport");
+  const zoom = graph.locator('output[aria-label="Zoom"]');
+  await expect(page.locator(".react-flow__node-box").first()).toBeVisible();
+  const box = (await graph.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  const before = await viewport.getAttribute("style");
+  const zoomBefore = await zoom.textContent();
+  // A sideways scroll only comes from a trackpad, so it pans instead of zooming.
+  await page.mouse.wheel(40, 30);
+  await expect(viewport).not.toHaveAttribute("style", before!);
+  await expect(zoom).toHaveText(zoomBefore!);
+  // Ctrl+scroll is how a pinch arrives in Chromium, and it zooms with a mouse too.
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, -100);
+  await page.keyboard.up("Control");
+  await expect(zoom).not.toHaveText(zoomBefore!);
+});

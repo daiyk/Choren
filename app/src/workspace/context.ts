@@ -13,6 +13,7 @@ import type {
 import type { Command } from "./registry";
 import type { Change, EditCommand, HistoryState } from "./authoring";
 import type { GraphStyle } from "./storage";
+import type { ScrollMode } from "../diagram/gestures";
 export interface ScriptDocument {
   box: Box;
   address?: GraphAddress;
@@ -21,6 +22,7 @@ export interface CommandTarget { behaviorId?: string; address?: GraphAddress; bo
 export interface WorkspaceContextValue {
   state: WorkspaceState;
   graphStyle: GraphStyle;
+  graphScrolling: ScrollMode;
   commands: Command[];
   diagnostics: Diagnostic[];
   scripts: Record<string, ScriptDocument>;

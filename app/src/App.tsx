@@ -85,6 +85,7 @@ import {
   LAYOUT_KEY,
   THEME_KEY,
   GRAPH_STYLE_KEY,
+  GRAPH_SCROLLING_KEY,
   TEXT_SCALE_KEY,
   WELCOME_KEY,
   readPreference,
@@ -94,6 +95,7 @@ import {
   type GraphStyle,
 } from "./workspace/storage";
 import { exampleProject } from "./workspace/example";
+import type { ScrollMode } from "./diagram/gestures";
 import {
   installNativeMenu,
   type NativeMenuHandle,
@@ -343,6 +345,11 @@ export default function App() {
     ["classic", "choregraphe"].includes(readPreference(GRAPH_STYLE_KEY) as string) ? "classic" : "choren",
   );
   useEffect(() => savePreference(GRAPH_STYLE_KEY, graphStyle), [graphStyle]);
+  const [graphScrolling, setGraphScrolling] = useState<ScrollMode>(() => {
+    const saved = readPreference(GRAPH_SCROLLING_KEY);
+    return saved === "pan" || saved === "zoom" ? saved : "auto";
+  });
+  useEffect(() => savePreference(GRAPH_SCROLLING_KEY, graphScrolling), [graphScrolling]);
   const [textScale, setTextScale] = useState(() => Number(readPreference(TEXT_SCALE_KEY)) || 1);
   useEffect(() => {
     document.documentElement.style.setProperty("--text-scale", String(textScale));
@@ -1650,6 +1657,7 @@ export default function App() {
     registerGraph,
     managePanel,
     graphStyle,
+    graphScrolling,
   };
   const targetPanel = dock?.getPanel(panelTarget);
   const groups =
@@ -2289,6 +2297,21 @@ export default function App() {
                 >
                   <option value="choren">Choren UI</option>
                   <option value="classic">Classic UI</option>
+                </select>
+              </label>
+              <label className="setting">
+                <span>
+                  Scrolling in graphs
+                  <small>Two-finger scrolling and the mouse wheel. Pinch to zoom on a trackpad, or hold Ctrl to zoom with the wheel.</small>
+                </span>
+                <select
+                  aria-label="Scrolling in graphs"
+                  value={graphScrolling}
+                  onChange={(event) => setGraphScrolling(event.target.value as ScrollMode)}
+                >
+                  <option value="auto">Trackpad pans, wheel zooms</option>
+                  <option value="pan">Always pans</option>
+                  <option value="zoom">Always zooms</option>
                 </select>
               </label>
               <label className="setting">

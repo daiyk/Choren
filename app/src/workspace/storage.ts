@@ -3,6 +3,7 @@ export type GraphStyle = "choren" | "classic";
 export const LAYOUT_KEY = "choren.layout.v1";
 export const THEME_KEY = "choren.theme";
 export const GRAPH_STYLE_KEY = "choren.graph-style";
+export const GRAPH_SCROLLING_KEY = "choren.graph-scrolling";
 export const TEXT_SCALE_KEY = "choren.text-scale";
 /** "done" once the first-run welcome window was closed. */
 export const WELCOME_KEY = "choren.welcome";
